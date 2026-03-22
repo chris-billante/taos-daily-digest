@@ -160,26 +160,22 @@ def get_todays_date():
 def search_land() -> str:
     """Search for new land listings matching project criteria."""
     areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
-    prompt = f"""Search for land for sale in Taos County, New Mexico. I need parcels that match ALL of these:
+    prompt = f"""Search for land for sale in Taos County, New Mexico matching these criteria:
 - Located in or near: {areas}
-- Minimum 3 acres
+- Minimum {CONSTRAINTS['land']['min_acres']} acres
 - Under ${CONSTRAINTS['land']['max_price']:,}
 - Must have legal road access
-- Off-grid is fine (no utilities needed)
-- Zoned for residential use
+- Off-grid OK — no utilities required
+- Zoned for residential use (RA or equivalent)
 
-Search LandWatch, Zillow, and Realtor.com for current listings. For each listing found, provide:
-- Price
-- Acreage
-- Location/area
-- Water situation if mentioned (well, cistern, water rights)
-- Road access notes
-- Direct URL to the listing
+Water is NOT a dealbreaker. Parcels without water hookup are fine — we will install cistern/hauled water.
+Do NOT dismiss or downgrade listings for lacking water, sewer, or electric service.
 
-If a listing has verified water access AND is under $50,000, mark it as HIGH PRIORITY.
-Format as a clean list. If no listings match, say so clearly. Today's date: {get_todays_date().strftime('%B %d, %Y')}
+For each listing provide: Price, Acreage, Location, Water status (if mentioned), Road access, Direct URL.
+Mark any listing under $50,000 with water access as HIGH PRIORITY.
+If no listings match, say so. Today: {get_todays_date().strftime('%B %d, %Y')}
 
-IMPORTANT: Output ONLY the listings data. Do NOT narrate your search process. No preamble like 'I'll search for...' or 'Based on my search...'. Just the results."""
+IMPORTANT: Output ONLY the listings. No preamble. No 'I'll search' or 'Based on my search'. Just results."""
     return ask_claude(prompt)
 
 def search_builders() -> str:
@@ -187,77 +183,62 @@ def search_builders() -> str:
     builders = CONSTRAINTS["builders"]["active"]
     day_of_year = get_todays_date().timetuple().tm_yday
     builder = builders[day_of_year % len(builders)]
-    prompt = f"""Search for the latest news, reviews, pricing updates, or project completions for {builder['name']}.
-They build {builder['type']} homes. Their website is {builder['website']}.
-Models I'm tracking: {', '.join(builder['models'])}.
+    prompt = f"""Latest news, reviews, and pricing for {builder['name']} ({builder['type']}).
+Website: {builder['website']}. Models tracked: {', '.join(builder['models'])}.
 
-I'm building an off-grid home in Taos County, New Mexico at 7,000 ft elevation.
-My all-in budget is $350,000 including land, off-grid systems, and the structure.
+Context: Off-grid tiny home in Taos County, NM. 7,000 ft elevation. $350K all-in budget (land + structure + off-grid systems).
 
-Find:
-1. Any pricing changes or new models announced recently
-2. Recent customer reviews or completed project photos
-3. Any news about their NM delivery or compliance
-4. Any comparable builder I should also be evaluating
+Find: (1) Pricing changes or new models, (2) Recent customer reviews, (3) NM delivery/compliance news, (4) Any comparable builder worth evaluating.
 
-Keep it concise — bullet points with links. Today's date: {get_todays_date().strftime('%B %d, %Y')}
+Concise bullet points with links. Today: {get_todays_date().strftime('%B %d, %Y')}
 
-IMPORTANT: Output ONLY findings. No preamble like 'I'll search for...' or 'Let me search...'. Start directly with the content."""
+IMPORTANT: Output ONLY findings. No preamble. Start directly with content."""
     return ask_claude(prompt)
 
 def search_offgrid_nm() -> str:
     """Off-grid and NM regulatory news."""
-    prompt = f"""Search for recent news relevant to off-grid homebuilding in northern New Mexico. Topics to cover:
-1. New Mexico solar incentives or legislation changes (2025-2026)
-2. Taos County building code or zoning updates
-3. NM water rights news or well drilling regulations
-4. Off-grid living articles specific to high desert / northern NM
-5. NM Construction Industries Division (CID) updates affecting modular or kit homes
+    prompt = f"""Recent news for off-grid homebuilding in northern New Mexico (last 30 days if possible):
+1. NM solar incentives or legislation (2025-2026)
+2. Taos County building code or zoning changes
+3. NM water rights or well drilling regulation updates
+4. Off-grid living in high desert / northern NM
+5. NM CID updates affecting modular or kit homes
 
-Only include items from the last 30 days if possible. Provide brief summaries with links.
-Skip anything not directly relevant to building an off-grid primary residence in Taos County.
-Today's date: {get_todays_date().strftime('%B %d, %Y')}
+Brief summaries with links. Skip anything not relevant to off-grid primary residence in Taos County.
+Today: {get_todays_date().strftime('%B %d, %Y')}
 
-IMPORTANT: Output ONLY the news items. No search narration. Start directly with findings."""
+IMPORTANT: Output ONLY news items. No search narration. Start directly with findings."""
     return ask_claude(prompt)
 
 def search_vehicles() -> str:
     """Van market tracking + Tacoma search."""
     vs = CONSTRAINTS["vehicle_search"]
     regions = ", ".join(vs["search_regions"])
-    prompt = f"""Two vehicle searches:
+    prompt = f"""Two searches:
 
-SEARCH 1 — SPRINTER VAN MARKET:
-Search for Mercedes Sprinter 4x4 camper van sale prices to track market value.
-Current balance sheet value: ${CONSTRAINTS['van_sale']['balance_sheet_value']:,}.
-Target sale range: ${CONSTRAINTS['van_sale']['target_sale_range_low']:,}–${CONSTRAINTS['van_sale']['target_sale_range_high']:,}.
-Are Sprinter van prices trending up or down? Any recent comparable sales?
+SPRINTER VAN MARKET: Mercedes Sprinter 4x4 camper van recent sale prices.
+Balance sheet: ${CONSTRAINTS['van_sale']['balance_sheet_value']:,}. Target: ${CONSTRAINTS['van_sale']['target_sale_range_low']:,}–${CONSTRAINTS['van_sale']['target_sale_range_high']:,}.
+Trend direction? Recent comps?
 
-SEARCH 2 — TOYOTA TACOMA:
-Search CarGurus and Cars.com for: {vs['make']} {vs['model']} {vs['config']}
-Years: {vs['years']}, Trims: {', '.join(vs['trims'])}, Engine: {vs['engine']}
-Max price: ${vs['max_price']:,}, Max miles: {vs['max_miles']:,} miles
+TOYOTA TACOMA: {vs['make']} {vs['model']} {vs['config']}
+Years: {vs['years']}, Trims: {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi.
 Regions: {regions}
+For each: year, trim, miles, price, location, link. Flag Great Deals.
+Today: {get_todays_date().strftime('%B %d, %Y')}
 
-For each Tacoma found: year, trim, miles, price, city/state, and link.
-Flag any "Great Deal" rated listings. Today's date: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY the data. No search narration. Start directly with results."""
+IMPORTANT: Output ONLY data. No search narration. Start directly with results."""
     return ask_claude(prompt)
 
 def search_bridge_housing() -> str:
     """Yurt, RV, rental options."""
-    prompt = f"""Search for bridge housing options near Taos, New Mexico:
+    prompt = f"""Bridge housing near Taos, NM:
+1. YURTS: Colorado Yurt Company and Pacific Yurts — current pricing on 20-24 ft insulated models, sales, lead times.
+2. USED RV/5TH WHEEL: NM or southern CO, under $45K, year-round capable at 7,000 ft.
+3. RENTALS: Monthly rental market in Taos, furnished month-to-month under $2,500/mo.
 
-1. YURTS: Check Colorado Yurt Company and Pacific Yurts for current pricing on 20-24 ft insulated models. Any sales or lead time changes?
+Concise bullets with links. Skip sections with nothing new. Today: {get_todays_date().strftime('%B %d, %Y')}
 
-2. USED RV/5TH WHEEL: Search for used RVs or 5th wheels for sale in New Mexico or southern Colorado, under $45,000, suitable for year-round living at 7,000 ft elevation.
-
-3. SHORT-TERM RENTALS: What's the current monthly rental market in Taos, NM? Any furnished month-to-month options under $2,500/month?
-
-Concise bullets with links. Skip if nothing new. Today's date: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY the options found. No search narration. Start directly with content."""
+IMPORTANT: Output ONLY options found. No search narration. Start directly with content."""
     return ask_claude(prompt)
 
 def search_learning() -> str:
@@ -282,17 +263,14 @@ def search_learning() -> str:
     ]
     day_idx = get_todays_date().timetuple().tm_yday % len(topics)
     topic = topics[day_idx]
-    prompt = f"""Find ONE high-quality learning resource about: {topic}
+    prompt = f"""Find ONE high-quality free learning resource about: {topic}
 
-Prefer: YouTube videos from established channels (Will Prowse, etc.), detailed blog posts from
-practitioners, government guides, or well-researched articles. Must be free to access.
+Prefer: YouTube (Will Prowse, etc.), practitioner blogs, government guides.
+Previously shared (avoid repeats): {history_str}
 
-Previously shared resources (avoid repeats): {history_str}
+Provide: Title, Source, URL, 2-sentence summary. Today: {get_todays_date().strftime('%B %d, %Y')}
 
-Provide: Title, source/author, URL, and a 2-sentence summary of why it's worth watching/reading.
-Today's date: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY the resource. No search narration. Start directly with the title."""
+IMPORTANT: Output ONLY the resource. No narration. Start with the title."""
     result = ask_claude(prompt, max_tokens=512)
     # Track what we shared
     LEARNING_HISTORY.append(topic)
@@ -304,24 +282,22 @@ IMPORTANT: Output ONLY the resource. No search narration. Start directly with th
 def get_action_item() -> str:
     """Generate today's actionable task based on project phase and day rotation."""
     phase = CONSTRAINTS["project"]["phase"]
-    prompt = f"""You are a project manager for an off-grid home build in Taos County, NM.
-The project is in the "{phase}" phase. Budget: $350K all-in.
+    prompt = f"""You are a project manager for an off-grid tiny home build in Taos County, NM.
+Phase: "{phase}". Budget: $350K ALL-IN (land + structure + off-grid systems + permits).
+Builders: Zook Cabins, Mighty Small Homes, DC Structures.
+Land: 2-3+ acres, under $60K, Tres Piedras-Carson-Arroyo Hondo corridor.
+Financing: Cash land → construction loan → refi to perm.
+Off-grid is the plan — no water/sewer/electric hookup needed.
 
-Active builders: Zook Cabins, Mighty Small Homes, DC Structures.
-Land target: 3-5 acres, under $55K, Tres Piedras-Carson corridor.
-Financing: Cash land purchase → construction loan → refi to perm.
-Key risk: Water verification before any land commitment.
-
-Generate ONE specific, actionable task for today. Include:
-- What to do (specific action)
-- Who to contact (name + phone/email/URL if applicable)
+Generate ONE specific task for today. Include:
+- Action (what to do)
+- Contact (name + phone/URL)
 - Why it matters (one sentence)
 
-Keep it to 3-4 lines max. Make it something that can be done in 30 minutes or less.
-Today's date: {get_todays_date().strftime('%A, %B %d, %Y')}
-Vary the task — rotate between land search, builder quotes, lender research, off-grid learning, and professional outreach.
+3-4 lines max. Doable in 30 minutes. Rotate between land search, builder quotes, lender research, off-grid learning, professional outreach.
+Today: {get_todays_date().strftime('%A, %B %d, %Y')}
 
-IMPORTANT: Output ONLY the task. No preamble. Start directly with the action item. Format: Action, Contact, Why it matters."""
+IMPORTANT: Output ONLY the task. No preamble. Format: Action, Contact, Why it matters."""
     return ask_claude(prompt, max_tokens=512)
 
 # ---------------------------------------------------------------------------

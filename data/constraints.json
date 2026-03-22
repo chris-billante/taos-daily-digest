@@ -2,6 +2,7 @@
   "project": {
     "name": "Taos Off-Grid Homestead",
     "budget_ceiling": 350000,
+    "budget_note": "$350K ALL-IN max — includes land, structure, off-grid systems, permits, contingency. No exceptions.",
     "target_year": 2028,
     "phase": "pre-land",
     "committed_spend": 0
@@ -9,24 +10,24 @@
   "land": {
     "county": "Taos County",
     "state": "New Mexico",
-    "min_acres": 3,
-    "max_price": 55000,
-    "hard_ceiling": 60000,
+    "min_acres": 2,
+    "max_price": 60000,
     "target_areas": [
       "Tres Piedras",
       "Ojo Caliente",
       "Carson",
       "Arroyo del Agua",
-      "Hondo Mesa"
+      "Hondo Mesa",
+      "Arroyo Hondo"
     ],
     "requirements": [
       "Legal year-round road access",
-      "Water access (cistern OK, well preferred)",
-      "RA zoning or equivalent",
-      "No HOA blocking modular/kit",
+      "RA zoning or equivalent allowing primary residence",
+      "No HOA blocking modular/kit homes",
       "Buildable terrain (no steep slope, no flood zone)"
     ],
-    "zip_codes": ["87557", "87549", "87583", "87529", "87514"]
+    "water_note": "Water is NOT a dealbreaker. Off-grid water (cistern, hauled, rainwater) is fully supported. Existing water/well is a bonus, not a requirement.",
+    "zip_codes": ["87557", "87549", "87583", "87529", "87514", "87513"]
   },
   "builders": {
     "active": [
@@ -64,7 +65,7 @@
     "solar": "EG4 18kPV-12LV, 12x Canadian Solar CS6R-410MS, IronRidge ground-mount",
     "heating": "Blaze King Ashford 30 + Mitsubishi mini-split + propane wall backup",
     "hot_water": "Rinnai V65iP propane tankless",
-    "water": "Cistern preferred (budget), well if parcel allows",
+    "water": "Cistern preferred (budget), well if parcel allows, hauled water OK",
     "septic": "Standard NM permitted system",
     "systems_cost_low": 55000,
     "systems_cost_high": 90000
@@ -98,7 +99,10 @@
     "zook": "Zook Cabins — (717) 859-1610",
     "dc": "DC Structures — (503) 683-3410",
     "nm_cid": "NM CID Santa Fe — (505) 476-4672",
-    "taos_planning": "Taos County Planning — (575) 737-6440"
+    "taos_planning": "Taos County Planning — (575) 737-6440",
+    "centinel_bank": "Centinel Bank of Taos — 575-758-6700",
+    "rural_1st": "Rural 1st — 1-844-GO-RURAL",
+    "dimond_mortgage": "Dimond Mortgage Taos — dimondmortgage.com"
   },
   "email": {
     "recipient": "RECIPIENT_EMAIL_SECRET"
