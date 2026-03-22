@@ -202,7 +202,10 @@ Find:
 
 Keep it concise — bullet points with links. Today's date: {get_todays_date().strftime('%B %d, %Y')}
 
-IMPORTANT: Output ONLY findings. No preamble like 'I'll search for...' or 'Let me search...'. Start directly with the content."""() -> str:
+IMPORTANT: Output ONLY findings. No preamble like 'I'll search for...' or 'Let me search...'. Start directly with the content."""
+    return ask_claude(prompt)
+
+def search_offgrid_nm() -> str:
     """Off-grid and NM regulatory news."""
     prompt = f"""Search for recent news relevant to off-grid homebuilding in northern New Mexico. Topics to cover:
 1. New Mexico solar incentives or legislation changes (2025-2026)
