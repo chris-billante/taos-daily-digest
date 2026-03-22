@@ -1,0 +1,39 @@
+name: Taos Build Daily Digest
+
+on:
+  schedule:
+    # 7:00 AM Mountain Time = 14:00 UTC (MST/UTC-7)
+    # During MDT (Mar-Nov): 13:00 UTC
+    - cron: '0 14 * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  daily-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: "RECIPIENT_EMAIL_SECRET"
+        run: python src/main.py
+
+      - name: Commit cache updates
+        run: |
+          git config user.name "Taos Build Bot"
+          git config user.email "bot@taos-build.local"
+          git add data/*.json
+          git diff --staged --quiet || git commit -m "📊 Update caches $(date -u +%Y-%m-%d)"
+          git push
