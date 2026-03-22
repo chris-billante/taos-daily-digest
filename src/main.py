@@ -33,8 +33,13 @@ SENDER = os.environ.get("SENDER_EMAIL", "")
 PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = 2048
+
+# Delay between API calls in seconds.
+# Haiku uses fewer tokens so 30s is usually sufficient.
+# Increase to 65 if you switch back to Sonnet.
+INTER_CALL_DELAY = int(os.environ.get("INTER_CALL_DELAY", "30"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("taos-digest")
@@ -60,24 +65,38 @@ LEARNING_HISTORY = load_json(DATA / "learning_history.json")
 # ---------------------------------------------------------------------------
 
 def ask_claude(prompt: str, max_tokens: int = MAX_TOKENS) -> str:
-    """Call Claude API with web search tool enabled. Returns text response."""
+    """Call Claude API with web search tool enabled. Returns text response.
+    
+    Retries up to 5 times with exponential backoff on rate limit errors.
+    """
     client = anthropic.Anthropic(api_key=API_KEY)
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=max_tokens,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": prompt}],
-        )
-        # Extract all text blocks from response
-        texts = []
-        for block in response.content:
-            if block.type == "text":
-                texts.append(block.text)
-        return "\n".join(texts).strip()
-    except Exception as e:
-        log.error(f"Claude API error: {e}")
-        return f"⚠️ Search unavailable: {e}"
+    max_retries = 5
+
+    for attempt in range(max_retries):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=max_tokens,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=[{"role": "user", "content": prompt}],
+            )
+            # Extract all text blocks from response
+            texts = []
+            for block in response.content:
+                if block.type == "text":
+                    texts.append(block.text)
+            return "\n".join(texts).strip()
+        except anthropic.RateLimitError as e:
+            wait_time = 30 * (attempt + 1)  # 30s, 60s, 90s, 120s, 150s
+            if attempt < max_retries - 1:
+                log.warning(f"Rate limited (attempt {attempt + 1}/{max_retries}). Waiting {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                log.error(f"Rate limited after {max_retries} attempts: {e}")
+                return f"⚠️ Search unavailable (rate limited after {max_retries} retries)"
+        except Exception as e:
+            log.error(f"Claude API error: {e}")
+            return f"⚠️ Search unavailable: {e}"
 
 # ---------------------------------------------------------------------------
 # Intelligence Stream Functions
@@ -406,7 +425,7 @@ def main():
         except Exception as e:
             log.error(f"  ❌ {label} failed: {e}")
             sections[key] = f"⚠️ Search error: {e}"
-        time.sleep(2)  # Rate limit buffer
+        time.sleep(INTER_CALL_DELAY)  # Rate limit buffer between streams
 
     # Build and send email
     subject, html = build_email(sections)
