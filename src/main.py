@@ -336,12 +336,12 @@ def build_dashboard() -> str:
     builders_status = []
     for b in CONSTRAINTS["builders"]["active"]:
         builders_status.append(f"{b['name']}: {b['status'].replace('_', ' ')}")
-    return f"""<table style="width:100%;border-collapse:collapse;font-size:14px;">
-<tr><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;"><strong>Budget</strong></td><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">$350K ceiling</td></tr>
-<tr><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;"><strong>Committed</strong></td><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">${CONSTRAINTS['project']['committed_spend']:,}</td></tr>
-<tr><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;"><strong>Phase</strong></td><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">{CONSTRAINTS['project']['phase'].replace('_', ' ').title()}</td></tr>
-<tr><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;"><strong>Days to 2028 target</strong></td><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">{days_left}</td></tr>
-<tr><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;"><strong>Builders</strong></td><td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">{'<br>'.join(builders_status)}</td></tr>
+    return f"""<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:6px;">
+<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;width:140px;font-weight:600;">Budget</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">$350K ceiling</td></tr>
+<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Committed</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">${CONSTRAINTS['project']['committed_spend']:,}</td></tr>
+<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Phase</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">{CONSTRAINTS['project']['phase'].replace('_', ' ').title()}</td></tr>
+<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Days to Target</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">{days_left}</td></tr>
+<tr><td style="padding:6px 12px;font-weight:600;">Builders</td><td style="padding:6px 12px;">{' &nbsp;|&nbsp; '.join(builders_status)}</td></tr>
 </table>"""
 
 def format_section(emoji: str, title: str, content: str) -> str:
@@ -354,68 +354,69 @@ def format_section(emoji: str, title: str, content: str) -> str:
     if not content.strip():
         return ""
     
-    lines = content.strip().split("\n")
+    # Collapse multiple blank lines and strip horizontal rules
+    raw_lines = content.strip().split("\n")
+    lines = []
+    prev_blank = False
+    for l in raw_lines:
+        s = l.strip()
+        if re.match(r'^-{3,}\s*$', s) or re.match(r'^\*{3,}\s*$', s):
+            continue  # skip --- and *** dividers
+        if not s:
+            if not prev_blank:
+                lines.append("")
+            prev_blank = True
+        else:
+            lines.append(l)
+            prev_blank = False
+
     html_lines = []
-    in_list = False
-    
+    list_tag = None  # None, "ul", or "ol"
+
+    def close_list():
+        nonlocal list_tag
+        if list_tag:
+            html_lines.append(f"</{list_tag}>")
+            list_tag = None
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
+            close_list()
             continue
-        
-        # Convert markdown bold **text** to <strong>
+
+        # Inline formatting
         stripped = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
-        # Convert markdown links [text](url) to <a>
         stripped = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'<a href="\2" style="color:#2563EB;">\1</a>', stripped)
-        # Convert bare URLs to links
-        stripped = re.sub(r'(?<!")(https?://\S+)', r'<a href="\1" style="color:#2563EB;">\1</a>', stripped)
-        
-        # HIGH PRIORITY flag
+        stripped = re.sub(r'(?<!["\'])(https?://\S+)', r'<a href="\1" style="color:#2563EB;">\1</a>', stripped)
+
         if "HIGH PRIORITY" in stripped.upper() or stripped.startswith("🔴"):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
+            close_list()
             html_lines.append(f'<p style="color:#dc2626;font-weight:bold;background:#FEF2F2;padding:8px 12px;border-left:4px solid #dc2626;border-radius:4px;margin:8px 0;">{stripped}</p>')
-        # H2 headers (## text)
-        elif stripped.startswith("## "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            header_text = stripped[3:].strip()
-            html_lines.append(f'<h3 style="color:#1B3A5C;font-size:15px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #E2E8F0;">{header_text}</h3>')
-        # H3 headers (### text)
         elif stripped.startswith("### "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            header_text = stripped[4:].strip()
-            html_lines.append(f'<h4 style="color:#2D6A4F;font-size:14px;margin:12px 0 6px;">{header_text}</h4>')
-        # Numbered items (1. text)
+            close_list()
+            html_lines.append(f'<h4 style="color:#2D6A4F;font-size:14px;font-weight:600;margin:14px 0 6px;">{stripped[4:].strip()}</h4>')
+        elif stripped.startswith("## "):
+            close_list()
+            html_lines.append(f'<h3 style="color:#1B3A5C;font-size:15px;font-weight:600;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #E2E8F0;">{stripped[3:].strip()}</h3>')
         elif re.match(r'^\d+\.\s', stripped):
-            if not in_list:
-                html_lines.append('<ol style="margin:8px 0;padding-left:24px;">')
-                in_list = True
+            if list_tag != "ol":
+                close_list()
+                html_lines.append('<ol style="margin:6px 0;padding-left:24px;">')
+                list_tag = "ol"
             item_text = re.sub(r'^\d+\.\s*', '', stripped)
-            html_lines.append(f'<li style="margin-bottom:6px;">{item_text}</li>')
-        # Bullet items (- text or * text)
+            html_lines.append(f'<li style="margin-bottom:4px;">{item_text}</li>')
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            if not in_list:
-                html_lines.append('<ul style="margin:8px 0;padding-left:24px;">')
-                in_list = True
-            item_text = stripped[2:]
-            html_lines.append(f'<li style="margin-bottom:6px;">{item_text}</li>')
-        # Regular paragraph
+            if list_tag != "ul":
+                close_list()
+                html_lines.append('<ul style="margin:6px 0;padding-left:24px;">')
+                list_tag = "ul"
+            html_lines.append(f'<li style="margin-bottom:4px;">{stripped[2:]}</li>')
         else:
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f'<p style="margin:6px 0;line-height:1.5;">{stripped}</p>')
-    
-    if in_list:
-        html_lines.append("</ul>")
+            close_list()
+            html_lines.append(f'<p style="margin:4px 0;line-height:1.5;">{stripped}</p>')
+
+    close_list()
     
     body = "\n".join(html_lines)
     return f"""
