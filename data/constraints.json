@@ -1,0 +1,106 @@
+{
+  "project": {
+    "name": "Taos Off-Grid Homestead",
+    "budget_ceiling": 350000,
+    "target_year": 2028,
+    "phase": "pre-land",
+    "committed_spend": 0
+  },
+  "land": {
+    "county": "Taos County",
+    "state": "New Mexico",
+    "min_acres": 3,
+    "max_price": 55000,
+    "hard_ceiling": 60000,
+    "target_areas": [
+      "Tres Piedras",
+      "Ojo Caliente",
+      "Carson",
+      "Arroyo del Agua",
+      "Hondo Mesa"
+    ],
+    "requirements": [
+      "Legal year-round road access",
+      "Water access (cistern OK, well preferred)",
+      "RA zoning or equivalent",
+      "No HOA blocking modular/kit",
+      "Buildable terrain (no steep slope, no flood zone)"
+    ],
+    "zip_codes": ["87557", "87549", "87583", "87529", "87514"]
+  },
+  "builders": {
+    "active": [
+      {
+        "name": "Zook Cabins",
+        "models": ["Heritage", "Grove ADU", "Rivara ADU"],
+        "type": "IRC modular assembled delivery",
+        "all_in_low": 213000,
+        "all_in_high": 349000,
+        "website": "zookcabins.com",
+        "status": "quote_pending"
+      },
+      {
+        "name": "Mighty Small Homes",
+        "models": ["A-Frame 506sf", "Modern 600sf", "Cottage 600sf", "Ranch 768sf"],
+        "type": "SIP panel kit",
+        "all_in_low": 221000,
+        "all_in_high": 379000,
+        "website": "mightysmallhomes.com",
+        "status": "research"
+      },
+      {
+        "name": "DC Structures",
+        "models": ["Deschutes 756sf", "Modern Deschutes"],
+        "type": "Timber frame kit",
+        "all_in_low": 268000,
+        "all_in_high": 488000,
+        "website": "dcstructures.com",
+        "status": "budget_risk_flagged"
+      }
+    ],
+    "dropped": ["Titan Factory Direct", "Impresa Modular"]
+  },
+  "offgrid_systems": {
+    "solar": "EG4 18kPV-12LV, 12x Canadian Solar CS6R-410MS, IronRidge ground-mount",
+    "heating": "Blaze King Ashford 30 + Mitsubishi mini-split + propane wall backup",
+    "hot_water": "Rinnai V65iP propane tankless",
+    "water": "Cistern preferred (budget), well if parcel allows",
+    "septic": "Standard NM permitted system",
+    "systems_cost_low": 55000,
+    "systems_cost_high": 90000
+  },
+  "vehicle_search": {
+    "make": "Toyota",
+    "model": "Tacoma",
+    "config": "Double Cab Long Bed 4WD",
+    "years": [2020, 2021, 2022, 2023],
+    "max_price": 40000,
+    "max_miles": 60000,
+    "trims": ["TRD Off-Road", "TRD Sport", "SR5"],
+    "engine": "V6",
+    "search_regions": ["Colorado", "New Mexico", "Arizona", "Utah", "Nevada", "Texas"]
+  },
+  "van_sale": {
+    "vehicle": "Sprinter Van",
+    "balance_sheet_value": 120000,
+    "target_sale_range_low": 110000,
+    "target_sale_range_high": 150000,
+    "timing": "At move-in to new home"
+  },
+  "bridge_housing": {
+    "options": ["Yurt", "Used RV/5th wheel", "Short-term Taos rental"],
+    "yurt_suppliers": ["Colorado Yurt Company", "Pacific Yurts"],
+    "rv_budget_max": 45000
+  },
+  "contacts": {
+    "advisor": "ADVISOR_REDACTED",
+    "realtor": "Page Sullivan Group — Berkshire Hathaway Taos — pageandco.com",
+    "zook": "Zook Cabins — (717) 859-1610",
+    "dc": "DC Structures — (503) 683-3410",
+    "nm_cid": "NM CID Santa Fe — (505) 476-4672",
+    "taos_planning": "Taos County Planning — (575) 737-6440"
+  },
+  "email": {
+    "recipient": "RECIPIENT_EMAIL_SECRET"
+  }
+}
