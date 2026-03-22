@@ -12,6 +12,7 @@ import smtplib
 import hashlib
 import logging
 import time
+import re
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -98,6 +99,56 @@ def ask_claude(prompt: str, max_tokens: int = MAX_TOKENS) -> str:
             log.error(f"Claude API error: {e}")
             return f"⚠️ Search unavailable: {e}"
 
+
+def clean_response(text: str) -> str:
+    """Strip Claude's thinking preamble and search narration from responses.
+    
+    Removes lines like 'I'll search for...', 'Let me search...', 
+    'Based on my search...', 'Perfect. Now I have...' etc.
+    """
+    if not text:
+        return text
+    
+    # Patterns that indicate Claude narrating its own process
+    preamble_patterns = [
+        r"^I('ll| will| need to| should) search\b.*$",
+        r"^Let me search\b.*$",
+        r"^I('ll| will) look\b.*$",
+        r"^I found\b.*$",
+        r"^Based on my search\b.*$",
+        r"^Perfect\.?\s*(Now|Here)\b.*$",
+        r"^Great\.?\s*(Now|Here|I)\b.*$",
+        r"^Now I have\b.*$",
+        r"^Here('s| is| are) what I\b.*$",
+        r"^I was unable to\b.*$",
+        r"^Unfortunately,?\s*I\b.*$",
+        r"^I could not\b.*$",
+        r"^Searching\b.*$",
+        r"^Let me (find|check|look)\b.*$",
+        r"^I need to search\b.*$",
+        r"^\*I('ll| will| need)\b.*$",
+        r"^---+\s*$",
+    ]
+    
+    lines = text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            cleaned.append(line)
+            continue
+        skip = False
+        for pattern in preamble_patterns:
+            if re.match(pattern, stripped, re.IGNORECASE):
+                skip = True
+                break
+        if not skip:
+            cleaned.append(line)
+    
+    # Remove leading blank lines
+    result = "\n".join(cleaned).strip()
+    return result
+
 # ---------------------------------------------------------------------------
 # Intelligence Stream Functions
 # ---------------------------------------------------------------------------
@@ -126,7 +177,9 @@ Search LandWatch, Zillow, and Realtor.com for current listings. For each listing
 - Direct URL to the listing
 
 If a listing has verified water access AND is under $50,000, mark it as HIGH PRIORITY.
-Format as a clean list. If no listings match, say so clearly. Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
+Format as a clean list. If no listings match, say so clearly. Today's date: {get_todays_date().strftime('%B %d, %Y')}
+
+IMPORTANT: Output ONLY the listings data. Do NOT narrate your search process. No preamble like 'I'll search for...' or 'Based on my search...'. Just the results."""
     return ask_claude(prompt)
 
 def search_builders() -> str:
@@ -147,10 +200,9 @@ Find:
 3. Any news about their NM delivery or compliance
 4. Any comparable builder I should also be evaluating
 
-Keep it concise — bullet points with links. Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
-    return ask_claude(prompt)
+Keep it concise — bullet points with links. Today's date: {get_todays_date().strftime('%B %d, %Y')}
 
-def search_offgrid_nm() -> str:
+IMPORTANT: Output ONLY findings. No preamble like 'I'll search for...' or 'Let me search...'. Start directly with the content."""() -> str:
     """Off-grid and NM regulatory news."""
     prompt = f"""Search for recent news relevant to off-grid homebuilding in northern New Mexico. Topics to cover:
 1. New Mexico solar incentives or legislation changes (2025-2026)
@@ -161,7 +213,9 @@ def search_offgrid_nm() -> str:
 
 Only include items from the last 30 days if possible. Provide brief summaries with links.
 Skip anything not directly relevant to building an off-grid primary residence in Taos County.
-Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
+Today's date: {get_todays_date().strftime('%B %d, %Y')}
+
+IMPORTANT: Output ONLY the news items. No search narration. Start directly with findings."""
     return ask_claude(prompt)
 
 def search_vehicles() -> str:
@@ -183,7 +237,9 @@ Max price: ${vs['max_price']:,}, Max miles: {vs['max_miles']:,} miles
 Regions: {regions}
 
 For each Tacoma found: year, trim, miles, price, city/state, and link.
-Flag any "Great Deal" rated listings. Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
+Flag any "Great Deal" rated listings. Today's date: {get_todays_date().strftime('%B %d, %Y')}
+
+IMPORTANT: Output ONLY the data. No search narration. Start directly with results."""
     return ask_claude(prompt)
 
 def search_bridge_housing() -> str:
@@ -196,7 +252,9 @@ def search_bridge_housing() -> str:
 
 3. SHORT-TERM RENTALS: What's the current monthly rental market in Taos, NM? Any furnished month-to-month options under $2,500/month?
 
-Concise bullets with links. Skip if nothing new. Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
+Concise bullets with links. Skip if nothing new. Today's date: {get_todays_date().strftime('%B %d, %Y')}
+
+IMPORTANT: Output ONLY the options found. No search narration. Start directly with content."""
     return ask_claude(prompt)
 
 def search_learning() -> str:
@@ -229,7 +287,9 @@ practitioners, government guides, or well-researched articles. Must be free to a
 Previously shared resources (avoid repeats): {history_str}
 
 Provide: Title, source/author, URL, and a 2-sentence summary of why it's worth watching/reading.
-Today's date: {get_todays_date().strftime('%B %d, %Y')}"""
+Today's date: {get_todays_date().strftime('%B %d, %Y')}
+
+IMPORTANT: Output ONLY the resource. No search narration. Start directly with the title."""
     result = ask_claude(prompt, max_tokens=512)
     # Track what we shared
     LEARNING_HISTORY.append(topic)
@@ -256,7 +316,9 @@ Generate ONE specific, actionable task for today. Include:
 
 Keep it to 3-4 lines max. Make it something that can be done in 30 minutes or less.
 Today's date: {get_todays_date().strftime('%A, %B %d, %Y')}
-Vary the task — rotate between land search, builder quotes, lender research, off-grid learning, and professional outreach."""
+Vary the task — rotate between land search, builder quotes, lender research, off-grid learning, and professional outreach.
+
+IMPORTANT: Output ONLY the task. No preamble. Start directly with the action item. Format: Action, Contact, Why it matters."""
     return ask_claude(prompt, max_tokens=512)
 
 # ---------------------------------------------------------------------------
@@ -280,28 +342,82 @@ def build_dashboard() -> str:
 </table>"""
 
 def format_section(emoji: str, title: str, content: str) -> str:
-    """Format a digest section as HTML."""
+    """Format a digest section as clean HTML from markdown-ish Claude output."""
     if not content or content.strip() == "" or "unavailable" in content.lower():
         return ""
-    # Convert markdown-ish content to basic HTML
+    
+    # Clean Claude's preamble first
+    content = clean_response(content)
+    if not content.strip():
+        return ""
+    
     lines = content.strip().split("\n")
     html_lines = []
+    in_list = False
+    
     for line in lines:
-        line = line.strip()
-        if not line:
-            html_lines.append("<br>")
-        elif line.startswith("- ") or line.startswith("* "):
-            html_lines.append(f"<li style='margin-bottom:4px;'>{line[2:]}</li>")
-        elif line.startswith("🔴") or line.startswith("HIGH PRIORITY"):
-            html_lines.append(f"<p style='color:#dc2626;font-weight:bold;'>{line}</p>")
+        stripped = line.strip()
+        if not stripped:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            continue
+        
+        # Convert markdown bold **text** to <strong>
+        stripped = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
+        # Convert markdown links [text](url) to <a>
+        stripped = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'<a href="\2" style="color:#2563EB;">\1</a>', stripped)
+        # Convert bare URLs to links
+        stripped = re.sub(r'(?<!")(https?://\S+)', r'<a href="\1" style="color:#2563EB;">\1</a>', stripped)
+        
+        # HIGH PRIORITY flag
+        if "HIGH PRIORITY" in stripped.upper() or stripped.startswith("🔴"):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f'<p style="color:#dc2626;font-weight:bold;background:#FEF2F2;padding:8px 12px;border-left:4px solid #dc2626;border-radius:4px;margin:8px 0;">{stripped}</p>')
+        # H2 headers (## text)
+        elif stripped.startswith("## "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            header_text = stripped[3:].strip()
+            html_lines.append(f'<h3 style="color:#1B3A5C;font-size:15px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #E2E8F0;">{header_text}</h3>')
+        # H3 headers (### text)
+        elif stripped.startswith("### "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            header_text = stripped[4:].strip()
+            html_lines.append(f'<h4 style="color:#2D6A4F;font-size:14px;margin:12px 0 6px;">{header_text}</h4>')
+        # Numbered items (1. text)
+        elif re.match(r'^\d+\.\s', stripped):
+            if not in_list:
+                html_lines.append('<ol style="margin:8px 0;padding-left:24px;">')
+                in_list = True
+            item_text = re.sub(r'^\d+\.\s*', '', stripped)
+            html_lines.append(f'<li style="margin-bottom:6px;">{item_text}</li>')
+        # Bullet items (- text or * text)
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            if not in_list:
+                html_lines.append('<ul style="margin:8px 0;padding-left:24px;">')
+                in_list = True
+            item_text = stripped[2:]
+            html_lines.append(f'<li style="margin-bottom:6px;">{item_text}</li>')
+        # Regular paragraph
         else:
-            html_lines.append(f"<p style='margin:4px 0;'>{line}</p>")
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f'<p style="margin:6px 0;line-height:1.5;">{stripped}</p>')
+    
+    if in_list:
+        html_lines.append("</ul>")
+    
     body = "\n".join(html_lines)
-    if any("<li" in l for l in html_lines):
-        body = f"<ul style='margin:8px 0;padding-left:20px;'>{body}</ul>"
     return f"""
-    <div style="margin-bottom:24px;">
-      <h2 style="color:#1B3A5C;font-size:18px;margin-bottom:8px;border-bottom:2px solid #e2e8f0;padding-bottom:4px;">
+    <div style="margin-bottom:28px;">
+      <h2 style="color:#1B3A5C;font-size:17px;margin-bottom:10px;border-bottom:2px solid #1B3A5C;padding-bottom:6px;">
         {emoji} {title}
       </h2>
       <div style="font-size:14px;color:#334155;line-height:1.6;">
