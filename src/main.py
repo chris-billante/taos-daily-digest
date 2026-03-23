@@ -1,538 +1,324 @@
 #!/usr/bin/env python3
 """
-Taos Build Daily Digest — Main Orchestrator
-Calls Claude API with web search for each intelligence stream,
-formats results into HTML email, sends via Gmail SMTP.
+Taos Build Daily Digest v3.0 — Morning Brew style
+Clean, scannable, action-first with anchor index + caller scripts.
 """
 
-import json
-import os
-import sys
-import smtplib
-import hashlib
-import logging
-import time
-import re
+import json, os, sys, smtplib, logging, time, re
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
-
 import anthropic
-from jinja2 import Template
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
-TEMPLATES = ROOT / "templates"
-
 RECIPIENT = os.environ.get("RECIPIENT_EMAIL", "RECIPIENT_EMAIL_SECRET")
 SENDER = os.environ.get("SENDER_EMAIL", "")
 PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = 2048
-
-# Delay between API calls in seconds.
-# Haiku uses fewer tokens so 30s is usually sufficient.
-# Increase to 65 if you switch back to Sonnet.
-INTER_CALL_DELAY = int(os.environ.get("INTER_CALL_DELAY", "30"))
+DELAY = int(os.environ.get("INTER_CALL_DELAY", "30"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("taos-digest")
+log = logging.getLogger("taos")
 
-# ---------------------------------------------------------------------------
-# Load project data
-# ---------------------------------------------------------------------------
+def load_json(p):
+    with open(p) as f: return json.load(f)
+def save_json(p, d):
+    with open(p, "w") as f: json.dump(d, f, indent=2)
 
-def load_json(path: Path) -> dict | list:
-    with open(path) as f:
-        return json.load(f)
-
-def save_json(path: Path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-CONSTRAINTS = load_json(DATA / "constraints.json")
+C = load_json(DATA / "constraints.json")
 CACHE = load_json(DATA / "listing_cache.json")
-LEARNING_HISTORY = load_json(DATA / "learning_history.json")
+HIST = load_json(DATA / "learning_history.json")
+def now_mt(): return datetime.now(timezone(timedelta(hours=-7)))
+def today(): return now_mt().strftime("%B %d, %Y")
+def today_long(): return now_mt().strftime("%A, %B %d, %Y")
 
-# ---------------------------------------------------------------------------
-# Claude API caller with web search
-# ---------------------------------------------------------------------------
-
-def ask_claude(prompt: str, max_tokens: int = MAX_TOKENS) -> str:
-    """Call Claude API with web search tool enabled. Returns text response.
-    
-    Retries up to 5 times with exponential backoff on rate limit errors.
-    """
+# --- API ---
+def ask(prompt, max_tok=MAX_TOKENS):
     client = anthropic.Anthropic(api_key=API_KEY)
-    max_retries = 5
-
-    for attempt in range(max_retries):
+    for i in range(5):
         try:
-            response = client.messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=[{"role": "user", "content": prompt}],
-            )
-            # Extract all text blocks from response
-            texts = []
-            for block in response.content:
-                if block.type == "text":
-                    texts.append(block.text)
-            return "\n".join(texts).strip()
-        except anthropic.RateLimitError as e:
-            wait_time = 30 * (attempt + 1)  # 30s, 60s, 90s, 120s, 150s
-            if attempt < max_retries - 1:
-                log.warning(f"Rate limited (attempt {attempt + 1}/{max_retries}). Waiting {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                log.error(f"Rate limited after {max_retries} attempts: {e}")
-                return f"⚠️ Search unavailable (rate limited after {max_retries} retries)"
-        except Exception as e:
-            log.error(f"Claude API error: {e}")
-            return f"⚠️ Search unavailable: {e}"
+            r = client.messages.create(model=MODEL, max_tokens=max_tok,
+                tools=[{"type":"web_search_20250305","name":"web_search"}],
+                messages=[{"role":"user","content":prompt}])
+            return "\n".join(b.text for b in r.content if b.type=="text").strip()
+        except anthropic.RateLimitError:
+            w = 30*(i+1)
+            if i < 4: log.warning(f"Rate limit ({i+1}/5), wait {w}s"); time.sleep(w)
+            else: return ""
+        except Exception as e: log.error(f"API: {e}"); return ""
 
+# --- Clean + Format ---
+SKIP = [r"^I('ll| will| need to) (search|look)\b.*", r"^Let me (search|find|check)\b.*",
+    r"^Based on my search\b.*", r"^Perfect\.?\s*\b.*", r"^Great\.?\s*\b.*",
+    r"^Here('s| is| are) what I\b.*", r"^Searching\b.*", r"^I found\b.*",
+    r"^Unfortunately\b.*", r"^I was unable\b.*", r"^I could not\b.*"]
 
-def clean_response(text: str) -> str:
-    """Strip Claude's thinking preamble and search narration from responses.
-    
-    Removes lines like 'I'll search for...', 'Let me search...', 
-    'Based on my search...', 'Perfect. Now I have...' etc.
-    """
-    if not text:
-        return text
-    
-    # Patterns that indicate Claude narrating its own process
-    preamble_patterns = [
-        r"^I('ll| will| need to| should) search\b.*$",
-        r"^Let me search\b.*$",
-        r"^I('ll| will) look\b.*$",
-        r"^I found\b.*$",
-        r"^Based on my search\b.*$",
-        r"^Perfect\.?\s*(Now|Here)\b.*$",
-        r"^Great\.?\s*(Now|Here|I)\b.*$",
-        r"^Now I have\b.*$",
-        r"^Here('s| is| are) what I\b.*$",
-        r"^I was unable to\b.*$",
-        r"^Unfortunately,?\s*I\b.*$",
-        r"^I could not\b.*$",
-        r"^Searching\b.*$",
-        r"^Let me (find|check|look)\b.*$",
-        r"^I need to search\b.*$",
-        r"^\*I('ll| will| need)\b.*$",
-        r"^---+\s*$",
-    ]
-    
-    lines = text.split("\n")
-    cleaned = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            cleaned.append(line)
-            continue
-        skip = False
-        for pattern in preamble_patterns:
-            if re.match(pattern, stripped, re.IGNORECASE):
-                skip = True
-                break
-        if not skip:
-            cleaned.append(line)
-    
-    # Remove leading blank lines
-    result = "\n".join(cleaned).strip()
-    return result
-
-# ---------------------------------------------------------------------------
-# Intelligence Stream Functions
-# ---------------------------------------------------------------------------
-
-def get_todays_date():
-    mt = timezone(timedelta(hours=-7))
-    return datetime.now(mt)
-
-def search_land() -> str:
-    """Search for new land listings matching project criteria."""
-    areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
-    prompt = f"""Search for land for sale in Taos County, New Mexico matching these criteria:
-- Located in or near: {areas}
-- Minimum {CONSTRAINTS['land']['min_acres']} acres
-- Under ${CONSTRAINTS['land']['max_price']:,}
-- Must have legal road access
-- Off-grid OK — no utilities required
-- Zoned for residential use (RA or equivalent)
-
-Water is NOT a dealbreaker. Parcels without water hookup are fine — we will install cistern/hauled water.
-Do NOT dismiss or downgrade listings for lacking water, sewer, or electric service.
-
-For each listing provide: Price, Acreage, Location, Water status (if mentioned), Road access, Direct URL.
-Mark any listing under $50,000 with water access as HIGH PRIORITY.
-If no listings match, say so. Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY the listings. No preamble. No 'I'll search' or 'Based on my search'. Just results."""
-    return ask_claude(prompt)
-
-def search_builders() -> str:
-    """Rotating builder intelligence."""
-    builders = CONSTRAINTS["builders"]["active"]
-    day_of_year = get_todays_date().timetuple().tm_yday
-    builder = builders[day_of_year % len(builders)]
-    prompt = f"""Latest news, reviews, and pricing for {builder['name']} ({builder['type']}).
-Website: {builder['website']}. Models tracked: {', '.join(builder['models'])}.
-
-Context: Off-grid tiny home in Taos County, NM. 7,000 ft elevation. $350K all-in budget (land + structure + off-grid systems).
-
-Find: (1) Pricing changes or new models, (2) Recent customer reviews, (3) NM delivery/compliance news, (4) Any comparable builder worth evaluating.
-
-Concise bullet points with links. Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY findings. No preamble. Start directly with content."""
-    return ask_claude(prompt)
-
-def search_offgrid_nm() -> str:
-    """Off-grid and NM regulatory news."""
-    prompt = f"""Recent news for off-grid homebuilding in northern New Mexico (last 30 days if possible):
-1. NM solar incentives or legislation (2025-2026)
-2. Taos County building code or zoning changes
-3. NM water rights or well drilling regulation updates
-4. Off-grid living in high desert / northern NM
-5. NM CID updates affecting modular or kit homes
-
-Brief summaries with links. Skip anything not relevant to off-grid primary residence in Taos County.
-Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY news items. No search narration. Start directly with findings."""
-    return ask_claude(prompt)
-
-def search_vehicles() -> str:
-    """Van market tracking + Tacoma search."""
-    vs = CONSTRAINTS["vehicle_search"]
-    regions = ", ".join(vs["search_regions"])
-    prompt = f"""Two searches:
-
-SPRINTER VAN MARKET: Mercedes Sprinter 4x4 camper van recent sale prices.
-Balance sheet: ${CONSTRAINTS['van_sale']['balance_sheet_value']:,}. Target: ${CONSTRAINTS['van_sale']['target_sale_range_low']:,}–${CONSTRAINTS['van_sale']['target_sale_range_high']:,}.
-Trend direction? Recent comps?
-
-TOYOTA TACOMA: {vs['make']} {vs['model']} {vs['config']}
-Years: {vs['years']}, Trims: {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi.
-Regions: {regions}
-For each: year, trim, miles, price, location, link. Flag Great Deals.
-Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY data. No search narration. Start directly with results."""
-    return ask_claude(prompt)
-
-def search_bridge_housing() -> str:
-    """Yurt, RV, rental options."""
-    prompt = f"""Bridge housing near Taos, NM:
-1. YURTS: Colorado Yurt Company and Pacific Yurts — current pricing on 20-24 ft insulated models, sales, lead times.
-2. USED RV/5TH WHEEL: NM or southern CO, under $45K, year-round capable at 7,000 ft.
-3. RENTALS: Monthly rental market in Taos, furnished month-to-month under $2,500/mo.
-
-Concise bullets with links. Skip sections with nothing new. Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY options found. No search narration. Start directly with content."""
-    return ask_claude(prompt)
-
-def search_learning() -> str:
-    """Curated daily learning resource."""
-    history_str = ", ".join(LEARNING_HISTORY[-20:]) if LEARNING_HISTORY else "none yet"
-    topics = [
-        "off-grid solar installation tutorial for beginners",
-        "SIP panel construction walkthrough video",
-        "New Mexico building code guide for owner-builders",
-        "cistern water system sizing and installation",
-        "Blaze King wood stove setup and maintenance",
-        "construction-to-permanent loan explainer",
-        "New Mexico water rights for rural property buyers",
-        "off-grid septic system options and costs",
-        "EG4 inverter setup and configuration guide",
-        "Taos County off-grid community life",
-        "IronRidge solar ground mount installation",
-        "propane system design for off-grid homes",
-        "modular home foundation types for mountain sites",
-        "snow load engineering for high elevation homes",
-        "off-grid internet options Starlink rural setup",
-    ]
-    day_idx = get_todays_date().timetuple().tm_yday % len(topics)
-    topic = topics[day_idx]
-    prompt = f"""Find ONE high-quality free learning resource about: {topic}
-
-Prefer: YouTube (Will Prowse, etc.), practitioner blogs, government guides.
-Previously shared (avoid repeats): {history_str}
-
-Provide: Title, Source, URL, 2-sentence summary. Today: {get_todays_date().strftime('%B %d, %Y')}
-
-IMPORTANT: Output ONLY the resource. No narration. Start with the title."""
-    result = ask_claude(prompt, max_tokens=512)
-    # Track what we shared
-    LEARNING_HISTORY.append(topic)
-    if len(LEARNING_HISTORY) > 60:
-        LEARNING_HISTORY[:] = LEARNING_HISTORY[-60:]
-    save_json(DATA / "learning_history.json", LEARNING_HISTORY)
-    return result
-
-def get_action_item() -> str:
-    """Generate today's actionable task based on project phase and day rotation."""
-    phase = CONSTRAINTS["project"]["phase"]
-    prompt = f"""You are a project manager for an off-grid tiny home build in Taos County, NM.
-Phase: "{phase}". Budget: $350K ALL-IN (land + structure + off-grid systems + permits).
-Builders: Zook Cabins, Mighty Small Homes, DC Structures.
-Land: 2-3+ acres, under $60K, Tres Piedras-Carson-Arroyo Hondo corridor.
-Financing: Cash land → construction loan → refi to perm.
-Off-grid is the plan — no water/sewer/electric hookup needed.
-
-Generate ONE specific task for today. Include:
-- Action (what to do)
-- Contact (name + phone/URL)
-- Why it matters (one sentence)
-
-3-4 lines max. Doable in 30 minutes. Rotate between land search, builder quotes, lender research, off-grid learning, professional outreach.
-Today: {get_todays_date().strftime('%A, %B %d, %Y')}
-
-IMPORTANT: Output ONLY the task. No preamble. Format: Action, Contact, Why it matters."""
-    return ask_claude(prompt, max_tokens=512)
-
-# ---------------------------------------------------------------------------
-# Email formatting
-# ---------------------------------------------------------------------------
-
-def build_dashboard() -> str:
-    """Static project dashboard."""
-    now = get_todays_date()
-    target = datetime(2028, 6, 1, tzinfo=timezone(timedelta(hours=-7)))
-    days_left = (target - now).days
-    builders_status = []
-    for b in CONSTRAINTS["builders"]["active"]:
-        builders_status.append(f"{b['name']}: {b['status'].replace('_', ' ')}")
-    return f"""<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:6px;">
-<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;width:140px;font-weight:600;">Budget</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">$350K ceiling</td></tr>
-<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Committed</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">${CONSTRAINTS['project']['committed_spend']:,}</td></tr>
-<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Phase</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">{CONSTRAINTS['project']['phase'].replace('_', ' ').title()}</td></tr>
-<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">Days to Target</td><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;">{days_left}</td></tr>
-<tr><td style="padding:6px 12px;font-weight:600;">Builders</td><td style="padding:6px 12px;">{' &nbsp;|&nbsp; '.join(builders_status)}</td></tr>
-</table>"""
-
-def format_section(emoji: str, title: str, content: str) -> str:
-    """Format a digest section as clean HTML from markdown-ish Claude output."""
-    if not content or content.strip() == "" or "unavailable" in content.lower():
-        return ""
-    
-    # Clean Claude's preamble first
-    content = clean_response(content)
-    if not content.strip():
-        return ""
-    
-    # Collapse multiple blank lines and strip horizontal rules
-    raw_lines = content.strip().split("\n")
-    lines = []
-    prev_blank = False
-    for l in raw_lines:
-        s = l.strip()
-        if re.match(r'^-{3,}\s*$', s) or re.match(r'^\*{3,}\s*$', s):
-            continue  # skip --- and *** dividers
+def clean(txt):
+    if not txt: return ""
+    out, prev_blank = [], False
+    for line in txt.split("\n"):
+        s = line.strip()
+        if re.match(r'^-{3,}$', s) or re.match(r'^\*{3,}$', s): continue
+        if any(re.match(p, s, re.I) for p in SKIP): continue
         if not s:
-            if not prev_blank:
-                lines.append("")
+            if not prev_blank: out.append("")
             prev_blank = True
+        else: out.append(line); prev_blank = False
+    return "\n".join(out).strip()
+
+def md(t):
+    t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
+    t = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)',
+        r'<a href="\2" style="color:#2563EB">\1</a>', t)
+    t = re.sub(r"(?<![\"'>])(https?://\S+)",
+        r'<a href="\1" style="color:#2563EB">\1</a>', t)
+    return t
+
+def section(anchor, emoji, title, content, border_color="#1B3A5C"):
+    content = clean(content)
+    if not content: return ""
+    lines = content.split("\n")
+    html, ltag = [], None
+    def cl():
+        nonlocal ltag
+        if ltag: html.append(f"</{ltag}>"); ltag = None
+    for raw in lines:
+        s = raw.strip()
+        if not s: cl(); continue
+        if s in ("-","*","•"): continue
+        s = md(s)
+        if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
+            cl(); html.append(f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;padding:6px 10px;border-left:3px solid #dc2626;border-radius:3px;margin:6px 0">{s}</div>')
+        elif s.startswith("### "):
+            cl(); html.append(f'<div style="color:#2D6A4F;font-size:13px;font-weight:600;margin:10px 0 3px">{s[4:]}</div>')
+        elif s.startswith("## "):
+            cl(); html.append(f'<div style="color:#1B3A5C;font-size:14px;font-weight:600;margin:12px 0 4px;padding-bottom:2px;border-bottom:1px solid #E2E8F0">{s[3:]}</div>')
+        elif re.match(r'^\d+\.\s', s):
+            if ltag != "ol": cl(); html.append('<ol style="margin:4px 0;padding-left:22px">'); ltag = "ol"
+            itxt = re.sub(r'^[0-9]+[.]\s*', '', s)
+            html.append(f'<li style="margin-bottom:3px">{itxt}</li>')
+        elif s.startswith("- ") or s.startswith("* "):
+            if ltag != "ul": cl(); html.append('<ul style="margin:4px 0;padding-left:22px">'); ltag = "ul"
+            html.append(f'<li style="margin-bottom:3px">{s[2:]}</li>')
+        elif s.lower().startswith("📞") or "caller script" in s.lower():
+            cl(); html.append(f'<div style="background:#EFF6FF;border-left:3px solid #3B82F6;padding:8px 12px;margin:8px 0;border-radius:3px;font-style:italic;font-size:13px">{s}</div>')
         else:
-            lines.append(l)
-            prev_blank = False
+            cl(); html.append(f'<p style="margin:3px 0;line-height:1.4">{s}</p>')
+    cl()
+    body = "\n".join(html)
+    return f'''<div id="{anchor}" style="margin-bottom:20px;border-left:3px solid {border_color};padding-left:14px">
+  <div style="font-size:15px;font-weight:600;color:{border_color};margin-bottom:6px">{emoji} {title}</div>
+  <div style="font-size:13px;color:#334155;line-height:1.45">{body}</div>
+</div>'''
 
-    html_lines = []
-    list_tag = None  # None, "ul", or "ol"
+# --- Prompts ---
+SCRIPT = '''Include a "📞 CALLER SCRIPT" section — a 3-sentence phone script my wife Angela can read:
+"Hi, my name is Angela. My husband and I are planning a small off-grid home in Taos County, NM — [specific ask]. Could you help with [question]?"'''
 
-    def close_list():
-        nonlocal list_tag
-        if list_tag:
-            html_lines.append(f"</{list_tag}>")
-            list_tag = None
+def p_action():
+    return ask(f"""One task for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
+Builders: Zook Cabins, Mighty Small Homes, DC Structures.
+Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK, water hookup not needed.
 
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            close_list()
-            continue
+Format exactly:
+**Action:** [what to do]
+**Contact:** [name, phone/URL]
+**Why:** [one sentence]
+{SCRIPT}
+Rotate: land, builders, lenders, off-grid learning, outreach. Today: {today_long()}
+Output ONLY the task.""", 512)
 
-        # Inline formatting
-        stripped = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
-        stripped = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'<a href="\2" style="color:#2563EB;">\1</a>', stripped)
-        stripped = re.sub(r'(?<!["\'])(https?://\S+)', r'<a href="\1" style="color:#2563EB;">\1</a>', stripped)
+def p_land():
+    areas = ", ".join(C["land"]["target_areas"])
+    return ask(f"""Land for sale in Taos County NM: {areas}. Min {C['land']['min_acres']} acres, under ${C['land']['max_price']:,}.
+Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
+For each: Price | Acres | Location | Water if known | Road | URL.
+Under $50K with water = HIGH PRIORITY. Today: {today()}. Output ONLY listings.""")
 
-        if "HIGH PRIORITY" in stripped.upper() or stripped.startswith("🔴"):
-            close_list()
-            html_lines.append(f'<p style="color:#dc2626;font-weight:bold;background:#FEF2F2;padding:8px 12px;border-left:4px solid #dc2626;border-radius:4px;margin:8px 0;">{stripped}</p>')
-        elif stripped.startswith("### "):
-            close_list()
-            html_lines.append(f'<h4 style="color:#2D6A4F;font-size:14px;font-weight:600;margin:14px 0 6px;">{stripped[4:].strip()}</h4>')
-        elif stripped.startswith("## "):
-            close_list()
-            html_lines.append(f'<h3 style="color:#1B3A5C;font-size:15px;font-weight:600;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #E2E8F0;">{stripped[3:].strip()}</h3>')
-        elif re.match(r'^\d+\.\s', stripped):
-            if list_tag != "ol":
-                close_list()
-                html_lines.append('<ol style="margin:6px 0;padding-left:24px;">')
-                list_tag = "ol"
-            item_text = re.sub(r'^\d+\.\s*', '', stripped)
-            html_lines.append(f'<li style="margin-bottom:4px;">{item_text}</li>')
-        elif stripped.startswith("- ") or stripped.startswith("* "):
-            if list_tag != "ul":
-                close_list()
-                html_lines.append('<ul style="margin:6px 0;padding-left:24px;">')
-                list_tag = "ul"
-            html_lines.append(f'<li style="margin-bottom:4px;">{stripped[2:]}</li>')
-        else:
-            close_list()
-            html_lines.append(f'<p style="margin:4px 0;line-height:1.5;">{stripped}</p>')
+def p_builders():
+    bs = C["builders"]["active"]
+    b = bs[now_mt().timetuple().tm_yday % len(bs)]
+    return ask(f"""Latest on {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
+Context: off-grid tiny home, Taos County NM, 7000ft, $350K all-in.
+(1) Pricing/new models (2) Reviews (3) NM delivery (4) Comparable builders.
+Bullets with links. {SCRIPT}
+Today: {today()}. Output ONLY findings.""")
 
-    close_list()
-    
-    body = "\n".join(html_lines)
-    return f"""
-    <div style="margin-bottom:28px;">
-      <h2 style="color:#1B3A5C;font-size:17px;margin-bottom:10px;border-bottom:2px solid #1B3A5C;padding-bottom:6px;">
-        {emoji} {title}
-      </h2>
-      <div style="font-size:14px;color:#334155;line-height:1.6;">
-        {body}
-      </div>
-    </div>"""
+def p_offgrid():
+    return ask(f"""Off-grid + alternative housing news for northern New Mexico:
+1. NM solar incentives/legislation 2025-2026
+2. Taos County building/zoning changes
+3. Alternative housing that could work in Taos County — earthships, container homes, A-frames,
+   dome homes, yurts as permanent structures, park models, converted buses/vans on foundation,
+   or any creative small housing that is IRC/CID approvable in NM
+4. NM CID updates on modular/kit homes
+5. Taos-area off-grid community news, events, meetups
+6. NM water rights or well drilling updates
+Brief summaries with links. Today: {today()}. Output ONLY items.""")
 
-def build_email(sections: dict) -> str:
-    """Assemble full HTML email from sections."""
-    now = get_todays_date()
-    date_str = now.strftime("%A, %B %d, %Y")
+def p_vehicles():
+    vs = C["vehicle_search"]
+    return ask(f"""Two searches:
+SPRINTER: Recent 4x4 camper van sale prices. My value: ${C['van_sale']['balance_sheet_value']:,}. Trend?
+TACOMA: {vs['make']} {vs['model']} {vs['config']}, {vs['years']}, {', '.join(vs['trims'])}, V6,
+under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {', '.join(vs['search_regions'])}
+Each: year, trim, miles, price, location, link. Flag Great Deals.
+Today: {today()}. Output ONLY data.""")
 
-    # Determine top story for subject line
-    top_category = "Daily Briefing"
-    if "HIGH PRIORITY" in sections.get("land", "").upper():
-        top_category = "🔴 High-Priority Land Listing"
-    elif sections.get("land", "").strip():
-        top_category = "Land Listings"
-    elif sections.get("builders", "").strip():
-        top_category = "Builder Intel"
+def p_builders():
+    bs = C["builders"]["active"]
+    b = bs[now_mt().timetuple().tm_yday % len(bs)]
+    return ask(f"""Latest on {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
+Context: off-grid tiny home, Taos County NM, 7000ft, $350K all-in.
+(1) Pricing/new models (2) Reviews (3) NM delivery (4) Comparable builders.
+Bullets with links.
+{SCRIPT}
+Today: {today()}. Output ONLY findings.""")
 
-    subject = f"🏔️ Taos Build Intel — {now.strftime('%a %b %d')} | {top_category}"
+def p_offgrid():
+    return ask(f"""Off-grid and alternative housing news for northern New Mexico:
+1. NM solar incentives or legislation 2025-2026
+2. Taos County building or zoning changes
+3. Alternative housing ideas for Taos County - earthships, container homes, A-frames, dome homes, yurts as permanent structures, park models, or any creative small housing that is IRC or CID approvable in NM
+4. NM CID updates on modular or kit homes
+5. Taos-area off-grid community news or events
+6. NM water rights or well drilling updates
+Brief summaries with links. Today: {today()}. Output ONLY items.""")
 
-    body_sections = ""
-    body_sections += format_section("🔑", "TODAY'S ACTION ITEM", sections.get("action", ""))
-    body_sections += format_section("🏜️", "LAND LISTINGS", sections.get("land", ""))
-    body_sections += format_section("🏠", "BUILDER INTEL", sections.get("builders", ""))
-    body_sections += format_section("⚡", "OFF-GRID & NM NEWS", sections.get("offgrid", ""))
-    body_sections += format_section("🚐", "VAN & VEHICLE MARKET", sections.get("vehicles", ""))
-    body_sections += format_section("🏕️", "BRIDGE HOUSING", sections.get("bridge", ""))
-    body_sections += format_section("📚", "LEARNING RESOURCE", sections.get("learning", ""))
+def p_vehicles():
+    vs = C["vehicle_search"]
+    rgn = ", ".join(vs["search_regions"])
+    return ask(f"""Two searches:
+SPRINTER: Recent 4x4 camper van sale prices. My value: ${C['van_sale']['balance_sheet_value']:,}. Trend?
+TACOMA: {vs['make']} {vs['model']} {vs['config']}, {vs['years']}, {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {rgn}.
+Each: year, trim, miles, price, location, link. Flag Great Deals.
+Today: {today()}. Output ONLY data.""")
 
-    dashboard = build_dashboard()
+def p_bridge():
+    return ask(f"""Bridge housing near Taos NM:
+YURTS: Colorado Yurt Company + Pacific Yurts pricing for 20-24ft insulated. Sales? Lead times?
+{SCRIPT}
+RV/5TH WHEEL: For sale in NM or southern CO, under $45K, year-round at 7000ft. Specific listings with price, year, model, location, link.
+FURNISHED RENTALS: Taos month-to-month furnished under $2500. Specific listings from Furnished Finder, Airbnb monthly, Craigslist. Price, location, link.
+Bullets with links. Skip empty sections. Today: {today()}. Output ONLY options.""")
 
-    html = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:20px;background:#ffffff;">
-  <div style="background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
-    <h1 style="margin:0;font-size:22px;">🏔️ Taos Build Intel</h1>
-    <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">{date_str}</p>
+def p_learn():
+    h = ", ".join(HIST[-20:]) if HIST else "none"
+    topics = ["off-grid solar tutorial", "SIP panel construction", "NM building code owner-builders",
+        "cistern water sizing", "Blaze King setup", "construction-to-perm loan", "NM water rights",
+        "off-grid septic", "EG4 inverter guide", "Taos off-grid community",
+        "IronRidge ground mount", "propane off-grid", "modular foundation mountain",
+        "snow load engineering", "Starlink rural setup"]
+    t = topics[now_mt().timetuple().tm_yday % len(topics)]
+    r = ask(f"""ONE free resource about: {t}. YouTube, blogs, govt guides.
+Avoid: {h}. Format: Title | Source | URL | 2-sentence summary.
+Today: {today()}. Output ONLY the resource.""", 512)
+    HIST.append(t)
+    if len(HIST) > 60: HIST[:] = HIST[-60:]
+    save_json(DATA / "learning_history.json", HIST)
+    return r
+
+# --- Email ---
+def dashboard():
+    d = (datetime(2028,6,1,tzinfo=timezone(timedelta(hours=-7))) - now_mt()).days
+    bs = " | ".join(f"{b['name']}: {b['status'].replace('_',' ')}" for b in C["builders"]["active"])
+    return f'''<table style="width:100%;border-collapse:collapse;font-size:12px;background:#F8FAFC;border-radius:4px">
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${C["project"]["committed_spend"]:,}</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{C["project"]["phase"].replace("_"," ").title()}</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{d}</td></tr>
+<tr><td style="padding:4px 10px;font-weight:600">Builders</td><td style="padding:4px 10px">{bs}</td></tr>
+</table>'''
+
+def build_email(S):
+    dt = now_mt()
+    top = "Daily Briefing"
+    if "HIGH PRIORITY" in S.get("land","").upper(): top = "High-Priority Land"
+    elif S.get("land","").strip(): top = "Land Listings"
+    subj = f"Taos Build Intel - {dt.strftime('%a %b %d')} | {top}"
+
+    # Build sections
+    sec = ""
+    sec += section("action", "🔑", "TODAY'S ACTION ITEM", S.get("action",""), "#2563EB")
+    sec += section("land", "🏜️", "LAND LISTINGS", S.get("land",""), "#D97706")
+    sec += section("builders", "🏠", "BUILDER INTEL", S.get("builders",""), "#059669")
+    sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", S.get("offgrid",""), "#7C3AED")
+    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C")
+    sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", S.get("vehicles",""), "#64748B")
+    sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", S.get("bridge",""), "#64748B")
+    sec += section("learn", "📚", "LEARNING RESOURCE", S.get("learning",""), "#64748B")
+
+    # Anchor index
+    idx_items = [
+        ("action", "🔑 Action"), ("land", "🏜️ Land"), ("builders", "🏠 Builders"),
+        ("offgrid", "⚡ Off-Grid"), ("dash", "📊 Dashboard"),
+        ("tacoma", "🚐 Tacoma"), ("bridge", "🏕️ Housing"), ("learn", "📚 Learn")]
+    idx = " &nbsp;·&nbsp; ".join(
+        f'<a href="#{a}" style="color:#fff;text-decoration:none;font-size:11px">{l}</a>'
+        for a, l in idx_items)
+
+    html = f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:0 auto;padding:12px;background:#fff">
+<div style="background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;padding:14px 18px;border-radius:6px 6px 0 0">
+  <div style="font-size:18px;font-weight:700">🏔️ Taos Build Intel</div>
+  <div style="font-size:12px;opacity:0.8;margin:2px 0 8px">{dt.strftime("%A, %B %d, %Y")} | $350K All-In | Pre-Land Phase</div>
+  <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:6px">{idx}</div>
+</div>
+<div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:16px">
+  {sec}
+  <div style="margin-top:14px;padding:8px;background:#f8fafc;border-radius:4px;font-size:10px;color:#94a3b8;text-align:center">
+    Taos Off-Grid Homestead | GitHub Actions + Claude API
   </div>
-  <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:24px;">
-    {body_sections}
-    <div style="margin-top:24px;padding-top:16px;border-top:2px solid #1B3A5C;">
-      <h2 style="color:#1B3A5C;font-size:18px;margin-bottom:8px;">📊 PROJECT DASHBOARD</h2>
-      {dashboard}
-    </div>
-    <div style="margin-top:24px;padding:12px;background:#f8fafc;border-radius:6px;font-size:12px;color:#64748b;text-align:center;">
-      Taos Off-Grid Homestead Project | Budget: $350K | Phase: {CONSTRAINTS['project']['phase'].replace('_',' ').title()}<br>
-      Generated by your daily intel agent — GitHub Actions + Claude API
-    </div>
-  </div>
-</body>
-</html>"""
-    return subject, html
+</div></body></html>'''
+    return subj, html
 
-# ---------------------------------------------------------------------------
-# Email sender
-# ---------------------------------------------------------------------------
-
-def send_email(subject: str, html: str):
-    """Send HTML email via Gmail SMTP."""
+# --- Send ---
+def send(subj, html):
     if not SENDER or not PASSWORD:
-        log.warning("No email credentials — writing to file instead")
-        out = ROOT / "data" / "last_digest.html"
-        with open(out, "w") as f:
-            f.write(html)
-        log.info(f"Saved digest to {out}")
-        return
-
+        (ROOT/"data"/"last_digest.html").write_text(html); return
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = SENDER
-    msg["To"] = RECIPIENT
+    msg["Subject"] = subj; msg["From"] = SENDER; msg["To"] = RECIPIENT
     msg.attach(MIMEText(html, "html"))
-
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(SENDER, PASSWORD)
-            server.sendmail(SENDER, RECIPIENT, msg.as_string())
-        log.info(f"✅ Email sent to {RECIPIENT}")
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.starttls(); s.login(SENDER, PASSWORD)
+            s.sendmail(SENDER, RECIPIENT, msg.as_string())
+        log.info(f"Sent to {RECIPIENT}")
     except Exception as e:
-        log.error(f"❌ Email failed: {e}")
-        # Save locally as fallback
-        out = ROOT / "data" / "last_digest.html"
-        with open(out, "w") as f:
-            f.write(html)
-        log.info(f"Saved digest to {out}")
+        log.error(f"Send failed: {e}")
+        (ROOT/"data"/"last_digest.html").write_text(html)
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
+# --- Main ---
 def main():
-    log.info("🏔️ Starting Taos Build Daily Digest")
-
-    if not API_KEY:
-        log.error("ANTHROPIC_API_KEY not set")
-        sys.exit(1)
-
-    sections = {}
-
-    # Run each intelligence stream with delays to respect rate limits
+    log.info("v3.0 Starting")
+    if not API_KEY: log.error("No API key"); sys.exit(1)
+    S = {}
     streams = [
-        ("action", "Action Item", get_action_item),
-        ("land", "Land Search", search_land),
-        ("builders", "Builder Intel", search_builders),
-        ("offgrid", "Off-Grid & NM News", search_offgrid_nm),
-        ("vehicles", "Vehicle Market", search_vehicles),
-        ("bridge", "Bridge Housing", search_bridge_housing),
-        ("learning", "Learning Resource", search_learning),
-    ]
-
-    for key, label, fn in streams:
-        log.info(f"🔍 Searching: {label}...")
+        ("action",   "Action",    p_action),
+        ("land",     "Land",      p_land),
+        ("builders", "Builders",  p_builders),
+        ("offgrid",  "Off-Grid",  p_offgrid),
+        ("vehicles", "Vehicles",  p_vehicles),
+        ("bridge",   "Bridge",    p_bridge),
+        ("learning", "Learning",  p_learn)]
+    for k, label, fn in streams:
+        log.info(f"{label}...")
         try:
-            sections[key] = fn()
-            log.info(f"  ✅ {label} complete ({len(sections[key])} chars)")
+            S[k] = fn()
+            log.info(f"  OK {label} ({len(S[k])}ch)")
         except Exception as e:
-            log.error(f"  ❌ {label} failed: {e}")
-            sections[key] = f"⚠️ Search error: {e}"
-        time.sleep(INTER_CALL_DELAY)  # Rate limit buffer between streams
-
-    # Build and send email
-    subject, html = build_email(sections)
-    log.info(f"📧 Subject: {subject}")
-    send_email(subject, html)
-
-    # Update cache timestamp
-    CACHE["last_updated"] = get_todays_date().isoformat()
+            log.error(f"  FAIL {label}: {e}"); S[k] = ""
+        time.sleep(DELAY)
+    subj, html = build_email(S)
+    log.info(f"Subject: {subj}")
+    send(subj, html)
+    CACHE["last_updated"] = now_mt().isoformat()
     save_json(DATA / "listing_cache.json", CACHE)
-
-    log.info("🏔️ Daily digest complete")
+    log.info("Done")
 
 if __name__ == "__main__":
     main()
