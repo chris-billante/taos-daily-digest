@@ -316,6 +316,9 @@ def main():
     subj, html = build_email(S)
     log.info(f"Subject: {subj}")
     send(subj, html)
+    # Always save a local copy for review
+    (ROOT / "data" / "last_digest.html").write_text(html)
+    log.info("Saved local copy to data/last_digest.html")
     CACHE["last_updated"] = now_mt().isoformat()
     save_json(DATA / "listing_cache.json", CACHE)
     log.info("Done")
