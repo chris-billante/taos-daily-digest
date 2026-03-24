@@ -11,6 +11,12 @@ from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 import anthropic
 
+# v4.0 improvements
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from improved_email_formatter import strip_claude_preamble, extract_search_params
+from digest_tracker import DigestTracker, build_tracking_footer
+from table_and_fallback_fixes import get_learning_resources_for_day, format_learning_resources
+
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
 RECIPIENT = os.environ.get("RECIPIENT_EMAIL", "RECIPIENT_EMAIL_SECRET")
@@ -44,7 +50,9 @@ def ask(prompt, max_tok=MAX_TOKENS):
             r = client.messages.create(model=MODEL, max_tokens=max_tok,
                 tools=[{"type":"web_search_20250305","name":"web_search"}],
                 messages=[{"role":"user","content":prompt}])
-            return "\n".join(b.text for b in r.content if b.type=="text").strip()
+            response = "\n".join(b.text for b in r.content if b.type=="text").strip()
+            # v4.0: Apply jargon removal
+            return strip_claude_preamble(response)
         except anthropic.RateLimitError:
             w = 30*(i+1)
             if i < 4: log.warning(f"Rate limit ({i+1}/5), wait {w}s"); time.sleep(w)
