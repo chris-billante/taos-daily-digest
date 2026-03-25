@@ -32,10 +32,10 @@
     .header .sub { font-size: 12px; opacity: 0.75; }
     .body { padding: 22px; }
     .label {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.04em;
       color: #64748b;
       margin-bottom: 6px;
     }
@@ -64,7 +64,7 @@
       transition: border-color 0.15s;
       margin-bottom: 14px;
     }
-    textarea:focus { outline: none; border-color: #2563EB; }
+    textarea:focus { outline: 2px solid #2563EB; outline-offset: 2px; border-color: #2563EB; }
     textarea::placeholder { color: #94a3b8; }
     .btn {
       display: block;
@@ -85,10 +85,21 @@
     .btn:disabled { background: #86efac; cursor: not-allowed; }
     .error-msg {
       color: #dc2626;
+      background: #FEE2E2;
+      padding: 10px;
+      border-radius: 6px;
       font-size: 13px;
       margin-top: 10px;
       display: none;
     }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .success {
       text-align: center;
       padding: 32px 22px;
@@ -122,10 +133,10 @@
     <div class="label">Today's Task</div>
     <div id="task-box" class="task-box generic">Loading task…</div>
 
-    <div class="label">What happened? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
-    <textarea id="notes" placeholder="What did they say? Pricing, lead times, next steps — anything useful for tomorrow's digest." rows="4"></textarea>
+    <div class="label">What did you find out? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
+    <textarea id="notes" placeholder="Pricing, lead times, next steps…" rows="4"></textarea>
 
-    <div class="label">Any follow-up needed?</div>
+    <div class="label">Next step or follow-up?</div>
     <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px"></textarea>
 
     <button class="btn" id="submit-btn" onclick="submitFeedback()">✅ Mark Done &amp; Save Notes</button>
@@ -134,8 +145,9 @@
 
   <div id="success-view" class="success" style="display:none">
     <div class="check">✅</div>
-    <h2>Got it!</h2>
-    <p>Your notes have been saved.<br>They'll appear in tomorrow's digest.</p>
+    <h2>Logged!</h2>
+    <p><strong id="success-task"></strong></p>
+    <p>Your notes are saved. They'll show up in tomorrow's digest.</p>
     <hr class="divider">
     <p style="font-size:12px;color:#94a3b8">You can close this tab.</p>
   </div>
@@ -147,7 +159,7 @@
 // Replace FEEDBACK_PAT_PLACEHOLDER with the actual token after generating it in GitHub.
 const FEEDBACK_PAT = 'FEEDBACK_PAT_PLACEHOLDER';
 const REPO_OWNER   = 'chris-billante';
-const REPO_NAME    = 'taos-daily-digest';
+const REPO_NAME    = 'taos-feedback-private';
 
 function getParam(name) {
   return new URLSearchParams(window.location.search).get(name) || '';
@@ -210,7 +222,7 @@ async function submitFeedback() {
   const errEl    = document.getElementById('error-msg');
 
   btn.disabled  = true;
-  btn.textContent = 'Saving…';
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
   errEl.style.display = 'none';
 
   // Build machine-parseable payload
@@ -258,23 +270,31 @@ async function submitFeedback() {
     if (r.ok) {
       showSuccess();
     } else {
-      const err = await r.json().catch(() => ({}));
-      console.error('GitHub API error:', r.status, err);
-      errEl.textContent = `Could not save to GitHub (${r.status}). Please try again.`;
+      console.error('GitHub API error:', r.status);
+      if (r.status === 401 || r.status === 403) {
+        errEl.textContent = 'Permission error — please let Chris know.';
+      } else if (r.status >= 500) {
+        errEl.textContent = 'GitHub is having issues. Try again in a minute.';
+      } else {
+        errEl.textContent = 'Could not save. Please try again or text Chris.';
+      }
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = '✅ Mark Done & Save Notes';
+      btn.innerHTML = '✅ Mark Done & Save Notes';
     }
   } catch(e) {
     console.error('Network error:', e);
     errEl.textContent = 'Network error. Please check your connection and try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = '✅ Mark Done & Save Notes';
+    btn.innerHTML = '✅ Mark Done & Save Notes';
   }
 }
 
 function showSuccess() {
+  const task = getParam('task');
+  const taskText = task ? decodeURIComponent(task) : 'your task';
+  document.getElementById('success-task').textContent = taskText;
   document.getElementById('form-view').style.display = 'none';
   document.getElementById('success-view').style.display = 'block';
 }
