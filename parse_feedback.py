@@ -28,7 +28,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("parse-feedback")
 
-REPO_OWNER = "chris-billante"
+REPO_OWNER = os.environ.get("REPO_OWNER", "chris-billante")
 REPO_NAME  = os.environ.get("FEEDBACK_REPO", "taos-feedback-private")
 DATA_FILE  = Path(__file__).parent / "data" / "context_notes.json"
 LOOKBACK_DAYS = 14  # How many days of issues to check for feedback
@@ -113,7 +113,7 @@ def load_existing_notes() -> dict:
     """Load existing context_notes.json or return empty structure."""
     if DATA_FILE.exists():
         try:
-            with open(DATA_FILE) as f:
+            with open(DATA_FILE, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict) and "completions" in data:
                     return data
@@ -125,7 +125,7 @@ def load_existing_notes() -> dict:
 def save_notes(notes: dict):
     """Write context_notes.json."""
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(DATA_FILE, "w") as f:
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(notes, f, indent=2)
     log.info(f"Saved context_notes.json ({len(notes['completions'])} completion(s))")
 
