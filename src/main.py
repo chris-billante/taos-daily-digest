@@ -149,41 +149,45 @@ def md(t):
         r'<a href="\1" style="color:#2563EB">\1</a>', t)
     return t
 
-def section(anchor, emoji, title, content, border_color="#1B3A5C"):
-    content = clean(content)
+def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=False):
     if not content: return ""
-    lines = content.split("\n")
-    html, ltag = [], None
-    def cl():
-        nonlocal ltag
-        if ltag: html.append(f"</{ltag}>"); ltag = None
-    for raw in lines:
-        s = raw.strip()
-        if not s: cl(); continue
-        if s in ("-","*","•"): continue
-        s = md(s)
-        if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
-            cl(); html.append(f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;padding:6px 10px;border-left:3px solid #dc2626;border-radius:3px;margin:6px 0">{s}</div>')
-        elif s.startswith("### "):
-            cl(); html.append(f'<div style="color:#2D6A4F;font-size:13px;font-weight:600;margin:10px 0 3px">{s[4:]}</div>')
-        elif s.startswith("## "):
-            cl(); html.append(f'<div style="color:#1B3A5C;font-size:14px;font-weight:600;margin:12px 0 4px;padding-bottom:2px;border-bottom:1px solid #E2E8F0">{s[3:]}</div>')
-        elif re.match(r'^\d+\.\s', s):
-            if ltag != "ol": cl(); html.append('<ol style="margin:4px 0;padding-left:22px">'); ltag = "ol"
-            itxt = re.sub(r'^[0-9]+[.]\s*', '', s)
-            html.append(f'<li style="margin-bottom:3px">{itxt}</li>')
-        elif s.startswith("- ") or s.startswith("* "):
-            if ltag != "ul": cl(); html.append('<ul style="margin:4px 0;padding-left:22px">'); ltag = "ul"
-            html.append(f'<li style="margin-bottom:3px">{s[2:]}</li>')
-        elif s.lower().startswith("📞") or "caller script" in s.lower():
-            cl(); html.append(f'<div style="background:#EFF6FF;border-left:3px solid #3B82F6;padding:8px 12px;margin:8px 0;border-radius:3px;font-style:italic;font-size:13px">{s}</div>')
-        else:
-            cl(); html.append(f'<p style="margin:3px 0;line-height:1.4">{s}</p>')
-    cl()
-    body = "\n".join(html)
+    if raw_html:
+        body = content.strip()
+    else:
+        content = clean(content)
+        if not content: return ""
+        lines = content.split("\n")
+        html, ltag = [], None
+        def cl():
+            nonlocal ltag
+            if ltag: html.append(f"</{ltag}>"); ltag = None
+        for raw in lines:
+            s = raw.strip()
+            if not s: cl(); continue
+            if s in ("-","*","•"): continue
+            s = md(s)
+            if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
+                cl(); html.append(f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;padding:6px 10px;border-left:3px solid #dc2626;border-radius:3px;margin:6px 0">{s}</div>')
+            elif s.startswith("### "):
+                cl(); html.append(f'<div style="color:#2D6A4F;font-size:13px;font-weight:600;margin:10px 0 3px">{s[4:]}</div>')
+            elif s.startswith("## "):
+                cl(); html.append(f'<div style="color:#1B3A5C;font-size:14px;font-weight:600;margin:12px 0 4px;padding-bottom:2px;border-bottom:1px solid #E2E8F0">{s[3:]}</div>')
+            elif re.match(r'^\d+\.\s', s):
+                if ltag != "ol": cl(); html.append('<ol style="margin:4px 0;padding-left:22px">'); ltag = "ol"
+                itxt = re.sub(r'^[0-9]+[.]\s*', '', s)
+                html.append(f'<li style="margin-bottom:3px">{itxt}</li>')
+            elif s.startswith("- ") or s.startswith("* "):
+                if ltag != "ul": cl(); html.append('<ul style="margin:4px 0;padding-left:22px">'); ltag = "ul"
+                html.append(f'<li style="margin-bottom:3px">{s[2:]}</li>')
+            elif s.lower().startswith("📞") or "caller script" in s.lower():
+                cl(); html.append(f'<div style="background:#EFF6FF;border-left:3px solid #3B82F6;padding:8px 12px;margin:8px 0;border-radius:3px;font-style:italic;font-size:14px">{s}</div>')
+            else:
+                cl(); html.append(f'<p style="margin:3px 0;line-height:1.5">{s}</p>')
+        cl()
+        body = "\n".join(html)
     return f'''<div id="{anchor}" style="margin-bottom:20px;border-left:3px solid {border_color};padding-left:14px">
   <div style="font-size:15px;font-weight:600;color:{border_color};margin-bottom:6px">{emoji} {title}</div>
-  <div style="font-size:13px;color:#334155;line-height:1.45">{body}</div>
+  <div style="font-size:14px;color:#334155;line-height:1.5">{body}</div>
 </div>'''
 
 # --- Prompts ---
@@ -234,14 +238,71 @@ def p_offgrid():
 6. NM water rights or well drilling updates
 Brief summaries with links. Today: {today()}. Output ONLY items.""")
 
+def format_tacoma_results(new_listings, all_listings, fb_urls):
+    """Format scraped Tacoma listings as section-compatible markdown."""
+    parts = []
+    if new_listings:
+        parts.append(f"## 🆕 {len(new_listings)} New Listing{'s' if len(new_listings)!=1 else ''} Since Last Scan")
+        for lst in new_listings[:10]:
+            price = f"${lst['price_num']:,}" if lst.get("price_num") else lst.get("price","N/A")
+            miles = f"{lst['miles_num']:,} mi" if lst.get("miles_num") else lst.get("miles","N/A")
+            loc = lst.get("location","?")
+            bed = lst.get("bed","")
+            link = f" · [View]({lst['url']})" if lst.get("url") else ""
+            note = f" ⚠️ Verify 4WD" if lst.get("note") else ""
+            parts.append(f"- **{lst.get('title','Unknown')}** | {price} | {miles} | {loc}{link} {bed}{note}")
+    else:
+        parts.append("## No New Listings Today")
+        parts.append("No new matches since the last scan. Existing listings below are still active.")
+
+    if all_listings:
+        parts.append(f"## 📋 All Active Matches ({len(all_listings)})")
+        for lst in all_listings[:12]:
+            price = f"${lst['price_num']:,}" if lst.get("price_num") else lst.get("price","N/A")
+            miles = f"{lst['miles_num']:,} mi" if lst.get("miles_num") else lst.get("miles","N/A")
+            link = f" · [View]({lst['url']})" if lst.get("url") else ""
+            parts.append(f"- {lst.get('title','?')} | {price} | {miles} | {lst.get('location','?')} · {lst.get('source','')}{link}")
+        if len(all_listings) > 12:
+            parts.append(f"  _(+{len(all_listings)-12} more — see manual links below)_")
+
+    parts.append("## 🔍 Manual Check Links")
+    for fb in fb_urls:
+        parts.append(f"- [{fb['title']}]({fb['url']})")
+    parts.append("- [CarGurus: TRD Off-Road LB 4WD](https://www.cargurus.com/Cars/t-Used-Toyota-Tacoma-TRD-Off-Road-Double-Cab-LB-4WD-t88828)")
+    parts.append("- [Carvana: Tacoma Double Cab](https://www.carvana.com/cars/toyota-tacoma-double-cab)")
+    parts.append("- [CarMax: Tacoma TRD Off-Road](https://www.carmax.com/cars/toyota/tacoma/trd-off-road)")
+    parts.append("_VIN tip: \"DZ\" in positions 4-5 = Double Cab Long Bed ✅ (vs \"CZ\" = short bed ❌)_")
+    return "\n".join(parts)
+
+
 def p_vehicles():
     vs = C["vehicle_search"]
     rgn = ", ".join(vs["search_regions"])
-    return ask(f"""Two searches:
-SPRINTER: Recent 4x4 camper van sale prices. My value: ${C['van_sale']['balance_sheet_value']:,}. Trend?
-TACOMA: {vs['make']} {vs['model']} {vs['config']}, {vs['years']}, {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {rgn}.
-Each: year, trim, miles, price, location, link. Flag Great Deals.
-Today: {today()}. Output ONLY data.""")
+
+    # Sprinter van market check
+    sprinter = ask(f"""SPRINTER VAN MARKET: Recent 4x4 Sprinter camper van sale prices. My current value: ${C['van_sale']['balance_sheet_value']:,}. Market trend? 2-3 sentences max with relevant pricing links.
+Today: {today()}. Output ONLY the market assessment.""", 512)
+
+    # Tacoma: try direct scraping first, fall back to Claude search
+    tacoma_txt = ""
+    try:
+        sys.path.insert(0, str(ROOT))
+        from vehicle_tracker import run_tacoma_search
+        new_l, all_l, fb_urls = run_tacoma_search(DATA)
+        tacoma_txt = format_tacoma_results(new_l, all_l, fb_urls)
+        log.info(f"Vehicle tracker: {len(new_l)} new / {len(all_l)} total listings")
+    except Exception as e:
+        log.warning(f"Vehicle tracker failed ({e}), using Claude search")
+        tacoma_txt = ask(f"""TACOMA SEARCH: {vs['make']} {vs['model']} {vs['config']}, years {vs['years']}, {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {rgn}.
+Each listing: year, trim, miles, price, location, link. Flag great deals.
+Today: {today()}. Output ONLY listings.""")
+
+    parts = []
+    if sprinter:
+        parts.append(f"## 🚐 Sprinter Van Market\n{sprinter}")
+    if tacoma_txt:
+        parts.append(f"## 🛻 Tacoma Tracker\n{tacoma_txt}")
+    return "\n\n".join(parts) if parts else ""
 
 def p_bridge():
     return ask(f"""Bridge housing near Taos NM:
@@ -300,7 +361,7 @@ def dashboard():
                         f'<td style="padding:4px 10px">{summary}{note_td}</td></tr>')
         completions_html = "\n".join(rows) + "\n"
 
-    return f'''<table style="width:100%;border-collapse:collapse;font-size:12px;background:#F8FAFC;border-radius:4px">
+    return f'''<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:4px">
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${C["project"]["committed_spend"]:,}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{C["project"]["phase"].replace("_"," ").title()}</td></tr>
@@ -355,7 +416,7 @@ def build_email(S):
     sec += section("land", "🏜️", "LAND LISTINGS", S.get("land",""), "#D97706")
     sec += section("builders", "🏠", "BUILDER INTEL", S.get("builders",""), "#059669")
     sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", S.get("offgrid",""), "#7C3AED")
-    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C")
+    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
     sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", S.get("vehicles",""), "#64748B")
     sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", S.get("bridge",""), "#64748B")
     sec += section("learn", "📚", "LEARNING RESOURCE", S.get("learning",""), "#64748B")
