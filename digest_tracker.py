@@ -16,7 +16,7 @@ Architecture:
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import requests
 
@@ -126,8 +126,8 @@ class DigestTracker:
         - avg_time_to_close: Average hours from creation to close
         """
         # Get all tracking issues from last N days
-        since_date = datetime.now().timestamp() - (days * 86400)
-        since_iso = datetime.fromtimestamp(since_date).isoformat() + 'Z'
+        since_date = datetime.now(timezone.utc).timestamp() - (days * 86400)
+        since_iso = datetime.fromtimestamp(since_date, tz=timezone.utc).isoformat()
         
         params = {
             "labels": "daily-digest,tracking",
@@ -195,7 +195,7 @@ def build_tracking_footer(issue_number: int, repo_owner: str, repo_name: str) ->
             </a>
             
             <a href="{issue_url}#new_comment_field" 
-               style="display: inline-block; background: #f39c12; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
+               style="display: inline-block; background: #b45309; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
                 💬 Add Feedback
             </a>
         </div>
@@ -208,66 +208,3 @@ def build_tracking_footer(issue_number: int, repo_owner: str, repo_name: str) ->
     '''
     
     return footer_html
-
-
-# Example integration with existing digest workflow
-def main_workflow_example():
-    """
-    Example showing how to integrate tracking into the main digest workflow.
-    """
-    
-    # Initialize tracker
-    tracker = DigestTracker(
-        repo_owner=os.environ['REPO_OWNER'],
-        repo_name=os.environ['REPO_NAME'],
-        github_token=os.environ['GITHUB_TOKEN']
-    )
-    
-    # Date string
-    date_str = datetime.now().strftime('%A, %B %d, %Y')
-    
-    # Sections that will be in today's digest
-    sections = [
-        "Land Listings",
-        "Builder Intelligence", 
-        "Off-Grid News",
-        "NM Regulatory Updates",
-        "Van Market Analysis",
-        "Vehicle Search Results",
-        "Bridge Housing Options"
-    ]
-    
-    # Create tracking issue
-    issue_number = tracker.create_digest_issue(date_str, sections)
-    
-    if issue_number:
-        print(f"Created tracking issue #{issue_number}")
-        print(f"URL: {tracker.get_issue_url(issue_number)}")
-        
-        # Build email with tracking footer
-        # ... (your existing email building code) ...
-        
-        tracking_footer = build_tracking_footer(
-            issue_number=issue_number,
-            repo_owner=os.environ['REPO_OWNER'],
-            repo_name=os.environ['REPO_NAME']
-        )
-        
-        # Insert footer into email HTML before final </body> tag
-        # email_html = email_html.replace('</body>', tracking_footer + '</body>')
-        
-        print("\nTracking footer added to email")
-    
-    # Later: Get completion stats (useful for weekly summaries)
-    stats = tracker.get_completion_stats(days=7)
-    print(f"\n7-day stats: {stats}")
-
-
-if __name__ == '__main__':
-    # Test mode
-    print("Digest Tracker initialized")
-    print("\nTo use in your workflow:")
-    print("1. Set REPO_OWNER, REPO_NAME, GITHUB_TOKEN environment variables")
-    print("2. Call create_digest_issue() at the start of each digest run")
-    print("3. Add build_tracking_footer() HTML to your email")
-    print("4. Users can track progress directly in GitHub Issues")

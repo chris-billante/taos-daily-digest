@@ -17,6 +17,7 @@ ENV/
 
 # ── Environment & secrets ──────────────────────────────────────────────────────
 .env
+.env.*
 .envrc
 *.pem
 *.key

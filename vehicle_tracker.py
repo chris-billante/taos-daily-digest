@@ -53,7 +53,7 @@ def _load_cache(data_dir: Path) -> dict:
     cache_file = data_dir / "tacoma_cache.json"
     if cache_file.exists():
         try:
-            return json.loads(cache_file.read_text())
+            return json.loads(cache_file.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, IOError):
             return {}
     return {}
@@ -61,7 +61,7 @@ def _load_cache(data_dir: Path) -> dict:
 
 def _save_cache(data_dir: Path, cache: dict):
     cache_file = data_dir / "tacoma_cache.json"
-    cache_file.write_text(json.dumps(cache, indent=2))
+    cache_file.write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
 
 def _listing_id(listing: dict) -> str:
@@ -73,7 +73,7 @@ def _listing_id(listing: dict) -> str:
 # Parsers
 # ---------------------------------------------------------------------------
 
-def _parse_price(s: str):
+def _parse_price(s: str) -> int | None:
     if not s: return None
     digits = re.sub(r"[^\d]", "", str(s))
     if digits:
@@ -83,7 +83,7 @@ def _parse_price(s: str):
     return None
 
 
-def _parse_miles(s: str):
+def _parse_miles(s: str) -> int | None:
     if not s: return None
     digits = re.sub(r"[^\d]", "", str(s))
     if digits:
@@ -140,8 +140,8 @@ def _scrape_cargurus(max_price: int, max_miles: int, min_year: int, max_year: in
                                 "url": item.get("url", ""),
                                 "source": "CarGurus",
                             })
-                except Exception:
-                    pass
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    continue
 
             # Inline JS extraction via VIN pattern
             vin_pat = re.compile(r'"vin"\s*:\s*"([A-HJ-NPR-Z0-9]{17})"')
@@ -211,8 +211,8 @@ def _scrape_carscom(max_price: int, max_miles: int, min_year: int, max_year: int
                             "url": f"https://www.cars.com{ae['href']}" if ae and ae.get("href") else "",
                             "source": "Cars.com",
                         })
-                except Exception:
-                    pass
+                except (AttributeError, TypeError, KeyError):
+                    continue
 
             # JSON-LD fallback
             for script in soup.find_all("script", type="application/ld+json"):
@@ -228,8 +228,8 @@ def _scrape_carscom(max_price: int, max_miles: int, min_year: int, max_year: int
                                 "url": item.get("url", ""),
                                 "source": "Cars.com",
                             })
-                except Exception:
-                    pass
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    continue
         except Exception as e:
             log.warning(f"Cars.com error: {e}")
     return listings
@@ -300,7 +300,7 @@ def run_tacoma_search(data_dir: Path) -> tuple:
         raise ImportError("requests and beautifulsoup4 are required for vehicle_tracker")
 
     try:
-        cfg = json.loads((data_dir / "constraints.json").read_text())
+        cfg = json.loads((data_dir / "constraints.json").read_text(encoding="utf-8"))
         vs = cfg["vehicle_search"]
         max_price = vs.get("max_price", 40000)
         max_miles = vs.get("max_miles", 60000)
