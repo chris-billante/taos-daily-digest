@@ -55,23 +55,29 @@ def save_json(p: Path, d: dict | list) -> None:
     with open(p, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=2)
 
-C = load_json(DATA / "constraints.json")
-CACHE = load_json(DATA / "listing_cache.json")
-HIST = load_json(DATA / "learning_history.json")
-NOTES_FILE = DATA / "context_notes.json"
-NOTES = load_json(NOTES_FILE) if NOTES_FILE.exists() else {"completions": []}
+# Populated in main() to avoid import-time I/O
+CONSTRAINTS: dict = {}
+LISTING_CACHE: dict = {}
+LEARNING_HIST: list = []
+NOTES: dict = {"completions": []}
 
-def now_mt(): return datetime.now(timezone(timedelta(hours=-7)))
-def today(): return now_mt().strftime("%B %d, %Y")
-def today_long(): return now_mt().strftime("%A, %B %d, %Y")
 
-def recent_completions(days=7):
+def now_mt() -> datetime:
+    return datetime.now(timezone(timedelta(hours=-7)))
+
+def today() -> str:
+    return now_mt().strftime("%B %d, %Y")
+
+def today_long() -> str:
+    return now_mt().strftime("%A, %B %d, %Y")
+
+def recent_completions(days: int = 7) -> list[dict]:
     """Return completions from the last N days, newest first."""
     cutoff = (now_mt().date() - timedelta(days=days)).isoformat()
-    return [c for c in NOTES.get("completions", [])
+    return [c for c in NOTEsections.get("completions", [])
             if c.get("date", "") >= cutoff]
 
-def recent_context_block(days=7):
+def recent_context_block(days: int = 7) -> str:
     """Build a context string of recent completions for AI prompt injection."""
     completions = recent_completions(days)
     if not completions:
@@ -86,7 +92,7 @@ def recent_context_block(days=7):
         lines.append(line)
     return "RECENT COMPLETED ACTIONS — do NOT suggest repeating these; use notes as context:\n" + "\n".join(lines)
 
-def extract_action_line(content):
+def extract_action_line(content: str) -> str:
     """Pull just the Action: line from the full AI action-item response."""
     # Try **Action:** markdown format first
     match = re.search(r'\*\*Action:\*\*\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
@@ -101,9 +107,9 @@ def extract_action_line(content):
             return line[:160]
     return "Today's action item"
 
-def builder_notes_block():
+def builder_notes_block() -> str:
     """Extract notes from completions that mention known builders."""
-    builder_names = [b["name"].lower() for b in C.get("builders", {}).get("active", [])]
+    builder_names = [b["name"].lower() for b in CONSTRAINTsections.get("builders", {}).get("active", [])]
     relevant = []
     for c in recent_completions(days=14):
         task_lower = c.get("task_summary", "").lower()
@@ -147,7 +153,7 @@ SKIP = [r"^I('ll| will| need to) (search|look)\b.*", r"^Let me (search|find|chec
     r"^Here('s| is| are) what I\b.*", r"^Searching\b.*", r"^I found\b.*",
     r"^Unfortunately\b.*", r"^I was unable\b.*", r"^I could not\b.*"]
 
-def clean(txt):
+def clean_response(txt: str) -> str:
     if not txt: return ""
     out, prev_blank = [], False
     for line in txt.split("\n"):
@@ -160,20 +166,21 @@ def clean(txt):
         else: out.append(line); prev_blank = False
     return "\n".join(out).strip()
 
-def md(t):
-    t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
-    t = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)',
-        r'<a href="\2" style="color:#2563EB;text-decoration:underline">\1</a>', t)
-    t = re.sub(r"(?<![\"'>])(https?://\S+)",
-        r'<a href="\1" style="color:#2563EB;text-decoration:underline">\1</a>', t)
-    return t
+def markdown_to_html(text: str) -> str:
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)',
+        r'<a href="\2" style="color:#2563EB;text-decoration:underline">\1</a>', text)
+    text = re.sub(r"(?<![\"'>])(https?://\S+)",
+        r'<a href="\1" style="color:#2563EB;text-decoration:underline">\1</a>', text)
+    return text
 
-def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=False):
+def section(anchor: str, emoji: str, title: str, content: str,
+            border_color: str = "#1B3A5C", raw_html: bool = False) -> str:
     if not content: return ""
     if raw_html:
         body = content.strip()
     else:
-        content = clean(content)
+        content = clean_response(content)
         if not content: return ""
         lines = content.split("\n")
         html, ltag = [], None
@@ -184,7 +191,7 @@ def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=Fals
             s = raw.strip()
             if not s: cl(); continue
             if s in ("-","*","•"): continue
-            s = md(s)
+            s = markdown_to_html(s)
             if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
                 cl(); html.append(f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;padding:6px 10px;border-left:3px solid #dc2626;border-radius:3px;margin:6px 0">{s}</div>')
             elif s.startswith("### "):
@@ -213,7 +220,7 @@ def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=Fals
 SCRIPT = '''Include a "📞 CALLER SCRIPT" section — a 3-sentence phone script my wife Angela can read:
 "Hi, my name is Angela. My husband and I are planning a small off-grid home in Taos County, NM — [specific ask]. Could you help with [question]?"'''
 
-def p_action():
+def p_action() -> str:
     ctx = recent_context_block()
     ctx_section = f"\n\n{ctx}" if ctx else ""
     return ask(f"""One task for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
@@ -228,15 +235,15 @@ Format exactly:
 Rotate: land, builders, lenders, off-grid learning, outreach. Today: {today_long()}
 Output ONLY the task.""", 512)
 
-def p_land():
-    areas = ", ".join(C["land"]["target_areas"])
+def p_land() -> str:
+    areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
     return ask(f"""Land for sale in Taos County NM: {areas}. Min {C['land']['min_acres']} acres, under ${C['land']['max_price']:,}.
 Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
 For each: Price | Acres | Location | Water if known | Road | URL.
 Under $50K with water = HIGH PRIORITY. Today: {today()}. Output ONLY listings.""")
 
-def p_builders():
-    bs = C["builders"]["active"]
+def p_builders() -> str:
+    bs = CONSTRAINTS["builders"]["active"]
     b = bs[now_mt().timetuple().tm_yday % len(bs)]
     ctx = builder_notes_block()
     ctx_section = f"\n\n{ctx}" if ctx else ""
@@ -247,7 +254,7 @@ Bullets with links.
 {SCRIPT}{ctx_section}
 Today: {today()}. Output ONLY findings.""")
 
-def p_offgrid():
+def p_offgrid() -> str:
     return ask(f"""Off-grid and alternative housing news for northern New Mexico:
 1. NM solar incentives or legislation 2025-2026
 2. Taos County building or zoning changes
@@ -257,7 +264,7 @@ def p_offgrid():
 6. NM water rights or well drilling updates
 Brief summaries with links. Today: {today()}. Output ONLY items.""")
 
-def format_tacoma_results(new_listings, all_listings, fb_urls):
+def format_tacoma_results(new_listings: list, all_listings: list, fb_urls: list) -> str:
     """Format scraped Tacoma listings as section-compatible markdown."""
     parts = []
     if new_listings:
@@ -294,18 +301,17 @@ def format_tacoma_results(new_listings, all_listings, fb_urls):
     return "\n".join(parts)
 
 
-def p_vehicles():
-    vs = C["vehicle_search"]
+def p_vehicles() -> str:
+    vs = CONSTRAINTS["vehicle_search"]
     rgn = ", ".join(vs["search_regions"])
 
     # Sprinter van market check
-    sprinter = ask(f"""SPRINTER VAN MARKET: Recent 4x4 Sprinter camper van sale prices. My current value: ${C['van_sale']['balance_sheet_value']:,}. Market trend? 2-3 sentences max with relevant pricing links.
+    sprinter = ask(f"""SPRINTER VAN MARKET: Recent 4x4 Sprinter camper van sale prices. My current value: ${CONSTRAINTS['van_sale']['balance_sheet_value']:,}. Market trend? 2-3 sentences max with relevant pricing links.
 Today: {today()}. Output ONLY the market assessment.""", 512)
 
     # Tacoma: try direct scraping first, fall back to Claude search
     tacoma_txt = ""
     try:
-        sys.path.insert(0, str(ROOT))
         from vehicle_tracker import run_tacoma_search
         new_l, all_l, fb_urls = run_tacoma_search(DATA)
         tacoma_txt = format_tacoma_results(new_l, all_l, fb_urls)
@@ -323,7 +329,7 @@ Today: {today()}. Output ONLY listings.""")
         parts.append(f"## 🛻 Tacoma Tracker\n{tacoma_txt}")
     return "\n\n".join(parts) if parts else ""
 
-def p_bridge():
+def p_bridge() -> str:
     return ask(f"""Bridge housing near Taos NM:
 YURTS: Colorado Yurt Company + Pacific Yurts pricing for 20-24ft insulated. Sales? Lead times?
 {SCRIPT}
@@ -331,10 +337,10 @@ RV/5TH WHEEL: For sale in NM or southern CO, under $45K, year-round at 7000ft. S
 FURNISHED RENTALS: Taos month-to-month furnished under $2500. Specific listings from Furnished Finder, Airbnb monthly, Craigslist. Price, location, link.
 Bullets with links. Skip empty sections. Today: {today()}. Output ONLY options.""")
 
-def p_learn():
+def p_learn() -> str:
     # v4.0: Try web search first, fall back to curated library
     try:
-        h = ", ".join(HIST[-20:]) if HIST else "none"
+        h = ", ".join(LEARNING_HIST[-20:]) if LEARNING_HIST else "none"
         topics = ["off-grid solar tutorial", "SIP panel construction", "NM building code owner-builders",
             "cistern water sizing", "Blaze King setup", "construction-to-perm loan", "NM water rights",
             "off-grid septic", "EG4 inverter guide", "Taos off-grid community",
@@ -352,9 +358,9 @@ Today: {today()}. Output ONLY the resource.""", 512)
             resources_data = get_learning_resources_for_day(day_of_week)
             return format_learning_resources(resources_data)
         
-        HIST.append(t)
-        if len(HIST) > 60: HIST[:] = HIST[-60:]
-        save_json(DATA / "learning_history.json", HIST)
+        LEARNING_HIST.append(t)
+        if len(LEARNING_HIST) > 60: LEARNING_HIST[:] = LEARNING_HIST[-60:]
+        save_json(DATA / "learning_history.json", LEARNING_HIST)
         return r
     except Exception as e:
         log.warning(f"Learning resource search failed: {e}, using fallback")
@@ -363,9 +369,11 @@ Today: {today()}. Output ONLY the resource.""", 512)
         return format_learning_resources(resources_data)
 
 # --- Email ---
-def dashboard():
-    d = (datetime(2028,6,1,tzinfo=timezone(timedelta(hours=-7))) - now_mt()).days
-    bs = " | ".join(f"{b['name']}: {b['status'].replace('_',' ')}" for b in C["builders"]["active"])
+def dashboard() -> str:
+    target_year = CONSTRAINTS.get("project", {}).get("target_year", 2028)
+    target_date = datetime(target_year, 6, 1, tzinfo=timezone(timedelta(hours=-7)))
+    days_left = (target_date - now_mt()).days
+    bs = " | ".join(f"{b['name']}: {b['status'].replace('_',' ')}" for b in CONSTRAINTS["builders"]["active"])
 
     # Recent completions block (last 48 hours)
     recent = recent_completions(days=2)
@@ -382,17 +390,17 @@ def dashboard():
 
     return f'''<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:4px">
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
-<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${C["project"]["committed_spend"]:,}</td></tr>
-<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{C["project"]["phase"].replace("_"," ").title()}</td></tr>
-<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{d}</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${CONSTRAINTS["project"]["committed_spend"]:,}</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{CONSTRAINTS["project"]["phase"].replace("_"," ").title()}</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{days_left}</td></tr>
 <tr><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}font-weight:600">Builders</td><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}">{bs}</td></tr>
 {completions_html}</table>'''
 
-def build_email(S):
+def build_email(sections: dict) -> tuple[str, str]:
     dt = now_mt()
     top = "Daily Briefing"
-    if "HIGH PRIORITY" in S.get("land","").upper(): top = "High-Priority Land"
-    elif S.get("land","").strip(): top = "Land Listings"
+    if "HIGH PRIORITY" in sections.get("land","").upper(): top = "High-Priority Land"
+    elif sections.get("land","").strip(): top = "Land Listings"
     subj = f"Taos Build Intel - {dt.strftime('%a %b %d')} | {top}"
 
     # v4.0: Create GitHub tracking issue
@@ -414,7 +422,7 @@ def build_email(S):
 
     # Build sections — order: Action → Dashboard → Button → Research → Learn
     sec = ""
-    action_content = S.get("action", "")
+    action_content = sections.get("action", "")
     sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
     sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
@@ -433,12 +441,12 @@ def build_email(S):
   </a>
 </div>'''
 
-    sec += section("land", "🏜️", "LAND LISTINGS", S.get("land",""), "#D97706")
-    sec += section("builders", "🏠", "BUILDER INTEL", S.get("builders",""), "#059669")
-    sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", S.get("offgrid",""), "#7C3AED")
-    sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", S.get("vehicles",""), "#64748B")
-    sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", S.get("bridge",""), "#64748B")
-    sec += section("learn", "📚", "LEARNING RESOURCE", S.get("learning",""), "#64748B")
+    sec += section("land", "🏜️", "LAND LISTINGS", sections.get("land",""), "#D97706")
+    sec += section("builders", "🏠", "BUILDER INTEL", sections.get("builders",""), "#059669")
+    sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", sections.get("offgrid",""), "#7C3AED")
+    sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", sections.get("vehicles",""), "#64748B")
+    sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", sections.get("bridge",""), "#64748B")
+    sec += section("learn", "📚", "LEARNING RESOURCE", sections.get("learning",""), "#64748B")
 
     # Visual TOC (non-clickable — anchor links break in Gmail/Outlook)
     toc_items = ["🔑 Action", "📊 Dashboard", "🏜️ Land", "🏠 Builders",
@@ -471,7 +479,7 @@ def build_email(S):
     return subj, html
 
 # --- Send ---
-def send(subj, html):
+def send(subj: str, html: str) -> None:
     if not SENDER or not PASSWORD:
         (ROOT/"data"/"last_digest.html").write_text(html, encoding="utf-8"); return
     msg = MIMEMultipart("alternative")
@@ -487,10 +495,22 @@ def send(subj, html):
         (ROOT/"data"/"last_digest.html").write_text(html, encoding="utf-8")
 
 # --- Main ---
-def main():
+def main() -> None:
+    global CONSTRAINTS, LISTING_CACHE, LEARNING_HIST, NOTES
+
     log.info("v4.0 Starting - Full integration active")
-    if not API_KEY: log.error("No API key"); sys.exit(1)
-    S = {}
+    if not API_KEY:
+        log.error("No API key")
+        sys.exit(1)
+
+    # Load data files at runtime, not import time
+    CONSTRAINTS = load_json(DATA / "constraints.json")
+    LISTING_CACHE = load_json(DATA / "listing_cache.json")
+    LEARNING_HIST = load_json(DATA / "learning_history.json")
+    notes_file = DATA / "context_notes.json"
+    NOTES = load_json(notes_file) if notes_file.exists() else {"completions": []}
+
+    sections = {}
     streams = [
         ("action",   "Action",    p_action),
         ("land",     "Land",      p_land),
@@ -498,23 +518,25 @@ def main():
         ("offgrid",  "Off-Grid",  p_offgrid),
         ("vehicles", "Vehicles",  p_vehicles),
         ("bridge",   "Bridge",    p_bridge),
-        ("learning", "Learning",  p_learn)]
-    for k, label, fn in streams:
+        ("learning", "Learning",  p_learn),
+    ]
+    for key, label, fn in streams:
         log.info(f"{label}...")
         try:
-            S[k] = fn()
-            log.info(f"  OK {label} ({len(S[k])}ch)")
+            sections[key] = fn()
+            log.info(f"  OK {label} ({len(sections[key])}ch)")
         except Exception as e:
-            log.error(f"  FAIL {label}: {e}", exc_info=True); S[k] = ""
+            log.error(f"  FAIL {label}: {e}", exc_info=True)
+            sections[key] = ""
         time.sleep(DELAY)
-    subj, html = build_email(S)
+
+    subj, html = build_email(sections)
     log.info(f"Subject: {subj}")
     send(subj, html)
-    # Always save a local copy for review
     (ROOT / "data" / "last_digest.html").write_text(html, encoding="utf-8")
     log.info("Saved local copy to data/last_digest.html")
-    CACHE["last_updated"] = now_mt().isoformat()
-    save_json(DATA / "listing_cache.json", CACHE)
+    LISTING_CACHE["last_updated"] = now_mt().isoformat()
+    save_json(DATA / "listing_cache.json", LISTING_CACHE)
     log.info("Done")
 
 if __name__ == "__main__":
