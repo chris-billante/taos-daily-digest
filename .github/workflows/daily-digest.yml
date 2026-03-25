@@ -29,7 +29,7 @@ jobs:
       - name: Parse feedback & build context
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_FEEDBACK_TOKEN }}
         run: python parse_feedback.py
 
       - name: Run daily digest

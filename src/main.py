@@ -144,9 +144,9 @@ def clean(txt):
 def md(t):
     t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
     t = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)',
-        r'<a href="\2" style="color:#2563EB">\1</a>', t)
+        r'<a href="\2" style="color:#2563EB;text-decoration:underline">\1</a>', t)
     t = re.sub(r"(?<![\"'>])(https?://\S+)",
-        r'<a href="\1" style="color:#2563EB">\1</a>', t)
+        r'<a href="\1" style="color:#2563EB;text-decoration:underline">\1</a>', t)
     return t
 
 def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=False):
@@ -186,7 +186,7 @@ def section(anchor, emoji, title, content, border_color="#1B3A5C", raw_html=Fals
         cl()
         body = "\n".join(html)
     return f'''<div id="{anchor}" style="margin-bottom:20px;border-left:3px solid {border_color};padding-left:14px">
-  <div style="font-size:15px;font-weight:600;color:{border_color};margin-bottom:6px">{emoji} {title}</div>
+  <div style="font-size:16px;font-weight:600;color:{border_color};margin-bottom:6px">{emoji} {title}</div>
   <div style="font-size:14px;color:#334155;line-height:1.5">{body}</div>
 </div>'''
 
@@ -393,54 +393,51 @@ def build_email(S):
     except Exception as e:
         log.warning(f"Tracking issue skipped: {e}")
 
-    # Build sections
+    # Build sections — order: Action → Dashboard → Button → Research → Learn
     sec = ""
     action_content = S.get("action", "")
     sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
+    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
-    # Feedback button — always shown when there's an action item
+    # Feedback button — after dashboard, before research sections
     if action_content:
         action_line = extract_action_line(action_content)
         task_enc    = urllib.parse.quote(action_line)
         date_str    = now_mt().strftime("%Y-%m-%d")
         issue_param = f"&issue={issue_number}" if issue_number else ""
         feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
-        sec += f'''<div style="margin:-12px 0 18px 17px">
+        sec += f'''<div style="margin:8px 0 20px 17px">
   <a href="{feedback_url}"
-     style="display:inline-block;background:#16a34a;color:#fff;padding:9px 20px;border-radius:6px;
-            text-decoration:none;font-size:13px;font-weight:600;letter-spacing:0.01em">
-    ✅ I Did This — Add Notes
+     style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:6px;
+            text-decoration:none;font-size:14px;font-weight:600;min-height:44px">
+    ✅ Mark Done &amp; Add Notes
   </a>
 </div>'''
 
     sec += section("land", "🏜️", "LAND LISTINGS", S.get("land",""), "#D97706")
     sec += section("builders", "🏠", "BUILDER INTEL", S.get("builders",""), "#059669")
     sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", S.get("offgrid",""), "#7C3AED")
-    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
     sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", S.get("vehicles",""), "#64748B")
     sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", S.get("bridge",""), "#64748B")
     sec += section("learn", "📚", "LEARNING RESOURCE", S.get("learning",""), "#64748B")
 
-    # Anchor index
-    idx_items = [
-        ("action", "🔑 Action"), ("land", "🏜️ Land"), ("builders", "🏠 Builders"),
-        ("offgrid", "⚡ Off-Grid"), ("dash", "📊 Dashboard"),
-        ("tacoma", "🚐 Tacoma"), ("bridge", "🏕️ Housing"), ("learn", "📚 Learn")]
-    idx = " &nbsp;·&nbsp; ".join(
-        f'<a href="#{a}" style="color:#fff;text-decoration:none;font-size:11px">{l}</a>'
-        for a, l in idx_items)
+    # Visual TOC (non-clickable — anchor links break in Gmail/Outlook)
+    toc_items = ["🔑 Action", "📊 Dashboard", "🏜️ Land", "🏠 Builders",
+                 "⚡ Off-Grid", "🚐 Tacoma", "🏕️ Housing", "📚 Learn"]
+    toc = " &nbsp;·&nbsp; ".join(
+        f'<span style="color:#fff;font-size:12px">{t}</span>' for t in toc_items)
 
     html = f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:0 auto;padding:12px;background:#fff">
-<div style="background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;padding:14px 18px;border-radius:6px 6px 0 0">
+<div style="background:#1B3A5C;background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;padding:14px 18px;border-radius:6px 6px 0 0">
   <div style="font-size:18px;font-weight:700">🏔️ Taos Build Intel</div>
-  <div style="font-size:12px;opacity:0.8;margin:2px 0 8px">{dt.strftime("%A, %B %d, %Y")} | $350K All-In | Pre-Land Phase</div>
-  <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:6px">{idx}</div>
+  <div style="font-size:12px;opacity:0.85;margin:2px 0 8px">{dt.strftime("%A, %B %d, %Y")} | $350K All-In | Pre-Land Phase</div>
+  <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:6px">{toc}</div>
 </div>
 <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:16px">
   {sec}
-  <div style="margin-top:14px;padding:8px;background:#f8fafc;border-radius:4px;font-size:10px;color:#94a3b8;text-align:center">
-    Taos Off-Grid Homestead | GitHub Actions + Claude API v4.0
+  <div style="margin-top:14px;padding:8px;background:#f8fafc;border-radius:4px;font-size:11px;color:#7B8BA8;text-align:center">
+    Taos Off-Grid Homestead | Daily Briefing v4.0
   </div>
 </div></body></html>'''
     

@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("parse-feedback")
 
 REPO_OWNER = "chris-billante"
-REPO_NAME  = "taos-daily-digest"
+REPO_NAME  = os.environ.get("FEEDBACK_REPO", "taos-feedback-private")
 DATA_FILE  = Path(__file__).parent / "data" / "context_notes.json"
 LOOKBACK_DAYS = 14  # How many days of issues to check for feedback
 NOTES_RETENTION_DAYS = 30  # Keep completions for this many days in context_notes.json
