@@ -8,7 +8,14 @@ Clean, scannable, action-first with:
 - Priority-aware email formatting
 """
 
-import json, os, sys, smtplib, logging, time, re, urllib.parse
+import json
+import logging
+import os
+import re
+import smtplib
+import sys
+import time
+import urllib.parse
 from datetime import datetime, date, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -30,22 +37,29 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = 2048
 DELAY = int(os.environ.get("INTER_CALL_DELAY", "30"))
+REPO_OWNER = os.environ.get("REPO_OWNER", "chris-billante")
+REPO_NAME = os.environ.get("REPO_NAME", "taos-daily-digest")
+FEEDBACK_BASE_URL = os.environ.get(
+    "FEEDBACK_BASE_URL",
+    f"https://{REPO_OWNER}.github.io/{REPO_NAME}/feedback"
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("taos")
 
-def load_json(p):
-    with open(p) as f: return json.load(f)
-def save_json(p, d):
-    with open(p, "w") as f: json.dump(d, f, indent=2)
+def load_json(p: Path) -> dict | list:
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+def save_json(p: Path, d: dict | list) -> None:
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=2)
 
 C = load_json(DATA / "constraints.json")
 CACHE = load_json(DATA / "listing_cache.json")
 HIST = load_json(DATA / "learning_history.json")
 NOTES_FILE = DATA / "context_notes.json"
 NOTES = load_json(NOTES_FILE) if NOTES_FILE.exists() else {"completions": []}
-
-FEEDBACK_BASE_URL = "https://chris-billante.github.io/taos-daily-digest/feedback"
 
 def now_mt(): return datetime.now(timezone(timedelta(hours=-7)))
 def today(): return now_mt().strftime("%B %d, %Y")
@@ -106,21 +120,26 @@ def builder_notes_block():
     return "\n".join(lines)
 
 # --- API ---
-def ask(prompt, max_tok=MAX_TOKENS):
-    client = anthropic.Anthropic(api_key=API_KEY)
+def ask(prompt: str, max_tok: int = MAX_TOKENS) -> str:
+    client = anthropic.Anthropic(api_key=API_KEY, timeout=120.0)
     for i in range(5):
         try:
             r = client.messages.create(model=MODEL, max_tokens=max_tok,
                 tools=[{"type":"web_search_20250305","name":"web_search"}],
                 messages=[{"role":"user","content":prompt}])
-            response = "\n".join(b.text for b in r.content if b.type=="text").strip()
-            # v4.0: Apply jargon removal
+            response = "\n".join(b.text for b in r.content if b.type == "text").strip()
             return strip_claude_preamble(response)
         except anthropic.RateLimitError:
-            w = 30*(i+1)
-            if i < 4: log.warning(f"Rate limit ({i+1}/5), wait {w}s"); time.sleep(w)
-            else: return ""
-        except Exception as e: log.error(f"API: {e}"); return ""
+            wait = min(30 * (2 ** i), 300)
+            if i < 4:
+                log.warning(f"Rate limit ({i+1}/5), wait {wait}s")
+                time.sleep(wait)
+            else:
+                log.error("Rate limit exceeded after 5 retries")
+                return ""
+        except anthropic.APIError as e:
+            log.error(f"Anthropic API error: {e}", exc_info=True)
+            return ""
 
 # --- Clean + Format ---
 SKIP = [r"^I('ll| will| need to) (search|look)\b.*", r"^Let me (search|find|check)\b.*",
@@ -292,7 +311,7 @@ Today: {today()}. Output ONLY the market assessment.""", 512)
         tacoma_txt = format_tacoma_results(new_l, all_l, fb_urls)
         log.info(f"Vehicle tracker: {len(new_l)} new / {len(all_l)} total listings")
     except Exception as e:
-        log.warning(f"Vehicle tracker failed ({e}), using Claude search")
+        log.warning(f"Vehicle tracker failed, using Claude search: {e}", exc_info=True)
         tacoma_txt = ask(f"""TACOMA SEARCH: {vs['make']} {vs['model']} {vs['config']}, years {vs['years']}, {', '.join(vs['trims'])}, V6, under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {rgn}.
 Each listing: year, trim, miles, price, location, link. Flag great deals.
 Today: {today()}. Output ONLY listings.""")
@@ -382,8 +401,8 @@ def build_email(S):
     try:
         if os.environ.get("GITHUB_TOKEN"):
             tracker = DigestTracker(
-                repo_owner="chris-billante",
-                repo_name="taos-daily-digest",
+                repo_owner=REPO_OWNER,
+                repo_name=REPO_NAME,
                 github_token=os.environ["GITHUB_TOKEN"]
             )
             section_names = ["Action Item", "Land Listings", "Builder Intel", "Off-Grid News", 
@@ -427,7 +446,7 @@ def build_email(S):
     toc = " &nbsp;·&nbsp; ".join(
         f'<span style="color:#fff;font-size:12px">{t}</span>' for t in toc_items)
 
-    html = f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+    html = f'''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:0 auto;padding:12px;background:#fff">
 <div style="background:#1B3A5C;background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;padding:14px 18px;border-radius:6px 6px 0 0">
   <div style="font-size:18px;font-weight:700">🏔️ Taos Build Intel</div>
@@ -444,7 +463,7 @@ def build_email(S):
     # v4.0: Add tracking footer if issue was created
     if issue_number and tracker:
         try:
-            tracking_footer = build_tracking_footer(issue_number, "chris-billante", "taos-daily-digest")
+            tracking_footer = build_tracking_footer(issue_number, REPO_OWNER, REPO_NAME)
             html = html.replace('</body>', tracking_footer + '</body>')
         except Exception as e:
             log.warning(f"Tracking footer skipped: {e}")
@@ -454,18 +473,18 @@ def build_email(S):
 # --- Send ---
 def send(subj, html):
     if not SENDER or not PASSWORD:
-        (ROOT/"data"/"last_digest.html").write_text(html); return
+        (ROOT/"data"/"last_digest.html").write_text(html, encoding="utf-8"); return
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subj; msg["From"] = SENDER; msg["To"] = RECIPIENT
     msg.attach(MIMEText(html, "html"))
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
             s.starttls(); s.login(SENDER, PASSWORD)
             s.sendmail(SENDER, RECIPIENT, msg.as_string())
-        log.info(f"Sent to {RECIPIENT}")
+        log.info("Digest email sent successfully")
     except Exception as e:
         log.error(f"Send failed: {e}")
-        (ROOT/"data"/"last_digest.html").write_text(html)
+        (ROOT/"data"/"last_digest.html").write_text(html, encoding="utf-8")
 
 # --- Main ---
 def main():
@@ -486,13 +505,13 @@ def main():
             S[k] = fn()
             log.info(f"  OK {label} ({len(S[k])}ch)")
         except Exception as e:
-            log.error(f"  FAIL {label}: {e}"); S[k] = ""
+            log.error(f"  FAIL {label}: {e}", exc_info=True); S[k] = ""
         time.sleep(DELAY)
     subj, html = build_email(S)
     log.info(f"Subject: {subj}")
     send(subj, html)
     # Always save a local copy for review
-    (ROOT / "data" / "last_digest.html").write_text(html)
+    (ROOT / "data" / "last_digest.html").write_text(html, encoding="utf-8")
     log.info("Saved local copy to data/last_digest.html")
     CACHE["last_updated"] = now_mt().isoformat()
     save_json(DATA / "listing_cache.json", CACHE)

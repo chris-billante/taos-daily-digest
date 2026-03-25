@@ -14,6 +14,7 @@ Architecture:
 """
 
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -74,15 +75,15 @@ class DigestTracker:
         response = requests.post(
             f"{self.api_base}/issues",
             headers=self.headers,
-            json=payload
+            json=payload,
+            timeout=15
         )
-        
+
         if response.status_code == 201:
             issue_data = response.json()
             return issue_data['number']
         else:
-            print(f"Error creating issue: {response.status_code}")
-            print(response.text)
+            logging.getLogger("taos").warning(f"Error creating issue: {response.status_code}")
             return None
     
     def get_issue_url(self, issue_number: int) -> str:
@@ -96,7 +97,8 @@ class DigestTracker:
         response = requests.post(
             f"{self.api_base}/issues/{issue_number}/comments",
             headers=self.headers,
-            json=payload
+            json=payload,
+            timeout=15
         )
         
         return response.status_code == 201
@@ -108,7 +110,8 @@ class DigestTracker:
         response = requests.patch(
             f"{self.api_base}/issues/{issue_number}",
             headers=self.headers,
-            json=payload
+            json=payload,
+            timeout=15
         )
         
         return response.status_code == 200
@@ -136,7 +139,8 @@ class DigestTracker:
         response = requests.get(
             f"{self.api_base}/issues",
             headers=self.headers,
-            params=params
+            params=params,
+            timeout=15
         )
         
         if response.status_code != 200:
