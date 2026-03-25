@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Taos Build Daily Digest v3.0 — Morning Brew style
-Clean, scannable, action-first with anchor index + caller scripts.
+Taos Build Daily Digest v4.0 — Full integration
+Clean, scannable, action-first with:
+- Claude jargon removal (strip_claude_preamble)
+- GitHub issue tracking for each digest  
+- Learning resource fallback library
+- Priority-aware email formatting
 """
 
 import json, os, sys, smtplib, logging, time, re
@@ -215,20 +219,35 @@ FURNISHED RENTALS: Taos month-to-month furnished under $2500. Specific listings 
 Bullets with links. Skip empty sections. Today: {today()}. Output ONLY options.""")
 
 def p_learn():
-    h = ", ".join(HIST[-20:]) if HIST else "none"
-    topics = ["off-grid solar tutorial", "SIP panel construction", "NM building code owner-builders",
-        "cistern water sizing", "Blaze King setup", "construction-to-perm loan", "NM water rights",
-        "off-grid septic", "EG4 inverter guide", "Taos off-grid community",
-        "IronRidge ground mount", "propane off-grid", "modular foundation mountain",
-        "snow load engineering", "Starlink rural setup"]
-    t = topics[now_mt().timetuple().tm_yday % len(topics)]
-    r = ask(f"""ONE free resource about: {t}. YouTube, blogs, govt guides.
+    # v4.0: Try web search first, fall back to curated library
+    try:
+        h = ", ".join(HIST[-20:]) if HIST else "none"
+        topics = ["off-grid solar tutorial", "SIP panel construction", "NM building code owner-builders",
+            "cistern water sizing", "Blaze King setup", "construction-to-perm loan", "NM water rights",
+            "off-grid septic", "EG4 inverter guide", "Taos off-grid community",
+            "IronRidge ground mount", "propane off-grid", "modular foundation mountain",
+            "snow load engineering", "Starlink rural setup"]
+        t = topics[now_mt().timetuple().tm_yday % len(topics)]
+        r = ask(f"""ONE free resource about: {t}. YouTube, blogs, govt guides.
 Avoid: {h}. Format: Title | Source | URL | 2-sentence summary.
 Today: {today()}. Output ONLY the resource.""", 512)
-    HIST.append(t)
-    if len(HIST) > 60: HIST[:] = HIST[-60:]
-    save_json(DATA / "learning_history.json", HIST)
-    return r
+        
+        # If result is empty or very short, use fallback
+        if not r or len(r) < 50:
+            log.info("Using fallback learning resources")
+            day_of_week = now_mt().strftime('%A').lower()
+            resources_data = get_learning_resources_for_day(day_of_week)
+            return format_learning_resources(resources_data)
+        
+        HIST.append(t)
+        if len(HIST) > 60: HIST[:] = HIST[-60:]
+        save_json(DATA / "learning_history.json", HIST)
+        return r
+    except Exception as e:
+        log.warning(f"Learning resource search failed: {e}, using fallback")
+        day_of_week = now_mt().strftime('%A').lower()
+        resources_data = get_learning_resources_for_day(day_of_week)
+        return format_learning_resources(resources_data)
 
 # --- Email ---
 def dashboard():
@@ -248,6 +267,23 @@ def build_email(S):
     if "HIGH PRIORITY" in S.get("land","").upper(): top = "High-Priority Land"
     elif S.get("land","").strip(): top = "Land Listings"
     subj = f"Taos Build Intel - {dt.strftime('%a %b %d')} | {top}"
+
+    # v4.0: Create GitHub tracking issue
+    tracker = None
+    issue_number = None
+    try:
+        if os.environ.get("GITHUB_TOKEN"):
+            tracker = DigestTracker(
+                repo_owner="chris-billante",
+                repo_name="taos-daily-digest",
+                github_token=os.environ["GITHUB_TOKEN"]
+            )
+            section_names = ["Action Item", "Land Listings", "Builder Intel", "Off-Grid News", 
+                           "Dashboard", "Tacoma & Van", "Bridge Housing", "Learning Resource"]
+            issue_number = tracker.create_digest_issue(dt.strftime("%A, %B %d, %Y"), section_names)
+            log.info(f"Created tracking issue #{issue_number}")
+    except Exception as e:
+        log.warning(f"Tracking issue skipped: {e}")
 
     # Build sections
     sec = ""
@@ -279,9 +315,18 @@ def build_email(S):
 <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:16px">
   {sec}
   <div style="margin-top:14px;padding:8px;background:#f8fafc;border-radius:4px;font-size:10px;color:#94a3b8;text-align:center">
-    Taos Off-Grid Homestead | GitHub Actions + Claude API
+    Taos Off-Grid Homestead | GitHub Actions + Claude API v4.0
   </div>
 </div></body></html>'''
+    
+    # v4.0: Add tracking footer if issue was created
+    if issue_number and tracker:
+        try:
+            tracking_footer = build_tracking_footer(issue_number, "chris-billante", "taos-daily-digest")
+            html = html.replace('</body>', tracking_footer + '</body>')
+        except Exception as e:
+            log.warning(f"Tracking footer skipped: {e}")
+    
     return subj, html
 
 # --- Send ---
@@ -302,7 +347,7 @@ def send(subj, html):
 
 # --- Main ---
 def main():
-    log.info("v3.0 Starting")
+    log.info("v4.0 Starting - Full integration active")
     if not API_KEY: log.error("No API key"); sys.exit(1)
     S = {}
     streams = [
