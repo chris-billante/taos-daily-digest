@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   daily-digest:
@@ -25,12 +26,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Parse feedback & build context
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python parse_feedback.py
+
       - name: Run daily digest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECIPIENT_EMAIL: "RECIPIENT_EMAIL_SECRET"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python src/main.py
 
       - name: Commit cache updates
