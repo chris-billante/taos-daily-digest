@@ -1,0 +1,52 @@
+name: Deploy Feedback Form
+
+# Injects GH_FEEDBACK_TOKEN secret at build time.
+# The token NEVER touches git — only exists in GitHub Secrets and the
+# deployed Pages artifact (served in memory, not committed anywhere).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'feedback/index.html'
+  workflow_dispatch: # Manual trigger when token is rotated
+
+permissions:
+  pages: write       # Deploy to GitHub Pages
+  id-token: write    # OIDC token for Pages deployment
+  contents: read     # Read source files
+
+jobs:
+  deploy-feedback:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build feedback form (inject token — never committed to git)
+        env:
+          GH_FEEDBACK_TOKEN: ${{ secrets.GH_FEEDBACK_TOKEN }}
+        run: |
+          mkdir -p _site/feedback
+          # Replace placeholder with actual secret — output goes to _site, NOT back to source
+          sed "s/FEEDBACK_PAT_PLACEHOLDER/${GH_FEEDBACK_TOKEN}/g" \
+            feedback/index.html > _site/feedback/index.html
+          echo "✅ Feedback form built with injected token"
+          # Sanity check: confirm placeholder was replaced
+          if grep -q "FEEDBACK_PAT_PLACEHOLDER" _site/feedback/index.html; then
+            echo "❌ ERROR: Placeholder was not replaced — GH_FEEDBACK_TOKEN may be empty"
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

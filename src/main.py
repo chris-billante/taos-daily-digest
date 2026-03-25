@@ -8,8 +8,8 @@ Clean, scannable, action-first with:
 - Priority-aware email formatting
 """
 
-import json, os, sys, smtplib, logging, time, re
-from datetime import datetime, timezone, timedelta
+import json, os, sys, smtplib, logging, time, re, urllib.parse
+from datetime import datetime, date, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -42,9 +42,53 @@ def save_json(p, d):
 C = load_json(DATA / "constraints.json")
 CACHE = load_json(DATA / "listing_cache.json")
 HIST = load_json(DATA / "learning_history.json")
+NOTES_FILE = DATA / "context_notes.json"
+NOTES = load_json(NOTES_FILE) if NOTES_FILE.exists() else {"completions": []}
+
+FEEDBACK_BASE_URL = "https://chris-billante.github.io/taos-daily-digest/feedback"
+
 def now_mt(): return datetime.now(timezone(timedelta(hours=-7)))
 def today(): return now_mt().strftime("%B %d, %Y")
 def today_long(): return now_mt().strftime("%A, %B %d, %Y")
+
+def recent_completions(days=7):
+    """Return completions from the last N days, newest first."""
+    cutoff = (now_mt().date() - timedelta(days=days)).isoformat()
+    return [c for c in NOTES.get("completions", [])
+            if c.get("date", "") >= cutoff]
+
+def recent_context_block(days=7):
+    """Build a context string of recent completions for AI prompt injection."""
+    completions = recent_completions(days)
+    if not completions:
+        return ""
+    lines = []
+    for c in completions:
+        line = f"- {c['date']}: COMPLETED '{c.get('task_summary', 'a task')}'"
+        if c.get("notes"):
+            line += f"\n  Angela's notes: {c['notes']}"
+        if c.get("follow_up"):
+            line += f"\n  Follow-up needed: {c['follow_up']}"
+        lines.append(line)
+    return "RECENT COMPLETED ACTIONS — do NOT suggest repeating these; use notes as context:\n" + "\n".join(lines)
+
+def builder_notes_block():
+    """Extract notes from completions that mention known builders."""
+    builder_names = [b["name"].lower() for b in C.get("builders", {}).get("active", [])]
+    relevant = []
+    for c in recent_completions(days=14):
+        task_lower = c.get("task_summary", "").lower()
+        notes_lower = c.get("notes", "").lower()
+        if any(b in task_lower or b in notes_lower for b in builder_names):
+            relevant.append(c)
+    if not relevant:
+        return ""
+    lines = ["ANGELA'S RECENT BUILDER CALLS — incorporate these findings:"]
+    for c in relevant:
+        lines.append(f"- {c['date']}: {c.get('task_summary', '')}")
+        if c.get("notes"):
+            lines.append(f"  What she learned: {c['notes']}")
+    return "\n".join(lines)
 
 # --- API ---
 def ask(prompt, max_tok=MAX_TOKENS):
@@ -132,10 +176,12 @@ SCRIPT = '''Include a "📞 CALLER SCRIPT" section — a 3-sentence phone script
 "Hi, my name is Angela. My husband and I are planning a small off-grid home in Taos County, NM — [specific ask]. Could you help with [question]?"'''
 
 def p_action():
+    ctx = recent_context_block()
+    ctx_section = f"\n\n{ctx}" if ctx else ""
     return ask(f"""One task for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
 Builders: Zook Cabins, Mighty Small Homes, DC Structures.
 Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK, water hookup not needed.
-
+{ctx_section}
 Format exactly:
 **Action:** [what to do]
 **Contact:** [name, phone/URL]
@@ -154,41 +200,13 @@ Under $50K with water = HIGH PRIORITY. Today: {today()}. Output ONLY listings.""
 def p_builders():
     bs = C["builders"]["active"]
     b = bs[now_mt().timetuple().tm_yday % len(bs)]
-    return ask(f"""Latest on {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
-Context: off-grid tiny home, Taos County NM, 7000ft, $350K all-in.
-(1) Pricing/new models (2) Reviews (3) NM delivery (4) Comparable builders.
-Bullets with links. {SCRIPT}
-Today: {today()}. Output ONLY findings.""")
-
-def p_offgrid():
-    return ask(f"""Off-grid + alternative housing news for northern New Mexico:
-1. NM solar incentives/legislation 2025-2026
-2. Taos County building/zoning changes
-3. Alternative housing that could work in Taos County — earthships, container homes, A-frames,
-   dome homes, yurts as permanent structures, park models, converted buses/vans on foundation,
-   or any creative small housing that is IRC/CID approvable in NM
-4. NM CID updates on modular/kit homes
-5. Taos-area off-grid community news, events, meetups
-6. NM water rights or well drilling updates
-Brief summaries with links. Today: {today()}. Output ONLY items.""")
-
-def p_vehicles():
-    vs = C["vehicle_search"]
-    return ask(f"""Two searches:
-SPRINTER: Recent 4x4 camper van sale prices. My value: ${C['van_sale']['balance_sheet_value']:,}. Trend?
-TACOMA: {vs['make']} {vs['model']} {vs['config']}, {vs['years']}, {', '.join(vs['trims'])}, V6,
-under ${vs['max_price']:,}, under {vs['max_miles']:,} mi. Regions: {', '.join(vs['search_regions'])}
-Each: year, trim, miles, price, location, link. Flag Great Deals.
-Today: {today()}. Output ONLY data.""")
-
-def p_builders():
-    bs = C["builders"]["active"]
-    b = bs[now_mt().timetuple().tm_yday % len(bs)]
+    ctx = builder_notes_block()
+    ctx_section = f"\n\n{ctx}" if ctx else ""
     return ask(f"""Latest on {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
 Context: off-grid tiny home, Taos County NM, 7000ft, $350K all-in.
 (1) Pricing/new models (2) Reviews (3) NM delivery (4) Comparable builders.
 Bullets with links.
-{SCRIPT}
+{SCRIPT}{ctx_section}
 Today: {today()}. Output ONLY findings.""")
 
 def p_offgrid():
@@ -253,13 +271,27 @@ Today: {today()}. Output ONLY the resource.""", 512)
 def dashboard():
     d = (datetime(2028,6,1,tzinfo=timezone(timedelta(hours=-7))) - now_mt()).days
     bs = " | ".join(f"{b['name']}: {b['status'].replace('_',' ')}" for b in C["builders"]["active"])
+
+    # Recent completions block (last 48 hours)
+    recent = recent_completions(days=2)
+    completions_html = ""
+    if recent:
+        rows = []
+        for c in recent:
+            summary = c.get("task_summary", "Task")[:80]
+            notes   = c.get("notes", "")
+            note_td = f'<br><span style="color:#64748b;font-size:11px">{notes[:120]}</span>' if notes else ""
+            rows.append(f'<tr><td style="padding:4px 10px;font-weight:600;color:#16a34a">✅ Done</td>'
+                        f'<td style="padding:4px 10px">{summary}{note_td}</td></tr>')
+        completions_html = "\n".join(rows) + "\n"
+
     return f'''<table style="width:100%;border-collapse:collapse;font-size:12px;background:#F8FAFC;border-radius:4px">
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${C["project"]["committed_spend"]:,}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{C["project"]["phase"].replace("_"," ").title()}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{d}</td></tr>
-<tr><td style="padding:4px 10px;font-weight:600">Builders</td><td style="padding:4px 10px">{bs}</td></tr>
-</table>'''
+<tr><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}font-weight:600">Builders</td><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}">{bs}</td></tr>
+{completions_html}</table>'''
 
 def build_email(S):
     dt = now_mt()
@@ -287,7 +319,24 @@ def build_email(S):
 
     # Build sections
     sec = ""
-    sec += section("action", "🔑", "TODAY'S ACTION ITEM", S.get("action",""), "#2563EB")
+    action_content = S.get("action", "")
+    sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
+
+    # Feedback button appended to action section (only when we have an issue to log to)
+    if action_content and issue_number:
+        task_snippet = re.sub(r'<[^>]+>', '', action_content)  # strip any HTML
+        task_snippet = re.sub(r'\s+', ' ', task_snippet).strip()[:120]
+        task_enc = urllib.parse.quote(task_snippet)
+        date_str = now_mt().strftime("%Y-%m-%d")
+        feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}&issue={issue_number}"
+        sec += f'''<div style="margin:-12px 0 18px 17px">
+  <a href="{feedback_url}"
+     style="display:inline-block;background:#16a34a;color:#fff;padding:9px 20px;border-radius:6px;
+            text-decoration:none;font-size:13px;font-weight:600;letter-spacing:0.01em">
+    ✅ I Did This — Add Notes
+  </a>
+</div>'''
+
     sec += section("land", "🏜️", "LAND LISTINGS", S.get("land",""), "#D97706")
     sec += section("builders", "🏠", "BUILDER INTEL", S.get("builders",""), "#059669")
     sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", S.get("offgrid",""), "#7C3AED")

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taos Build Intel — Task Feedback</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+      max-width: 480px;
+      width: 100%;
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #1B3A5C, #2D6A4F);
+      color: #fff;
+      padding: 20px 22px 16px;
+    }
+    .header .logo { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+    .header .sub { font-size: 12px; opacity: 0.75; }
+    .body { padding: 22px; }
+    .label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .task-box {
+      background: #f1f5f9;
+      border-left: 3px solid #2563EB;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #1e293b;
+      line-height: 1.45;
+      margin-bottom: 20px;
+    }
+    .task-box.generic { border-color: #94a3b8; color: #475569; font-style: italic; }
+    textarea {
+      width: 100%;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 15px;
+      font-family: inherit;
+      line-height: 1.5;
+      color: #1e293b;
+      resize: vertical;
+      min-height: 100px;
+      transition: border-color 0.15s;
+      margin-bottom: 14px;
+    }
+    textarea:focus { outline: none; border-color: #2563EB; }
+    textarea::placeholder { color: #94a3b8; }
+    .btn {
+      display: block;
+      width: 100%;
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      min-height: 52px;
+    }
+    .btn:hover { background: #15803d; }
+    .btn:active { background: #166534; }
+    .btn:disabled { background: #86efac; cursor: not-allowed; }
+    .error-msg {
+      color: #dc2626;
+      font-size: 13px;
+      margin-top: 10px;
+      display: none;
+    }
+    .success {
+      text-align: center;
+      padding: 32px 22px;
+    }
+    .success .check { font-size: 56px; margin-bottom: 12px; }
+    .success h2 { font-size: 20px; color: #1e293b; margin-bottom: 8px; }
+    .success p { font-size: 14px; color: #64748b; line-height: 1.5; }
+    .date-chip {
+      display: inline-block;
+      background: #eff6ff;
+      color: #2563EB;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 20px;
+      padding: 3px 10px;
+      margin-bottom: 12px;
+    }
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 18px 0; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="logo">🏔️ Taos Build Intel</div>
+    <div class="sub">Task Feedback</div>
+  </div>
+
+  <div id="form-view" class="body">
+    <div id="date-chip" class="date-chip" style="display:none"></div>
+
+    <div class="label">Today's Task</div>
+    <div id="task-box" class="task-box generic">Loading task…</div>
+
+    <div class="label">What happened? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
+    <textarea id="notes" placeholder="What did they say? Pricing, lead times, next steps — anything useful for tomorrow's digest." rows="4"></textarea>
+
+    <div class="label">Any follow-up needed?</div>
+    <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px"></textarea>
+
+    <button class="btn" id="submit-btn" onclick="submitFeedback()">✅ Mark Done &amp; Save Notes</button>
+    <div class="error-msg" id="error-msg">Something went wrong. Please try again or email Chris directly.</div>
+  </div>
+
+  <div id="success-view" class="success" style="display:none">
+    <div class="check">✅</div>
+    <h2>Got it!</h2>
+    <p>Your notes have been saved.<br>They'll appear in tomorrow's digest.</p>
+    <hr class="divider">
+    <p style="font-size:12px;color:#94a3b8">You can close this tab.</p>
+  </div>
+</div>
+
+<script>
+// Fine-grained PAT with Issues:Write scope on taos-daily-digest only.
+// This token cannot read code, only comment on issues in this one repo.
+// Replace FEEDBACK_PAT_PLACEHOLDER with the actual token after generating it in GitHub.
+const FEEDBACK_PAT = 'FEEDBACK_PAT_PLACEHOLDER';
+const REPO_OWNER   = 'chris-billante';
+const REPO_NAME    = 'taos-daily-digest';
+
+function getParam(name) {
+  return new URLSearchParams(window.location.search).get(name) || '';
+}
+
+function init() {
+  const date  = getParam('date');
+  const task  = getParam('task');
+  const issue = getParam('issue');
+
+  if (date) {
+    const chip = document.getElementById('date-chip');
+    chip.textContent = formatDate(date);
+    chip.style.display = 'inline-block';
+  }
+
+  const box = document.getElementById('task-box');
+  if (task) {
+    box.textContent = decodeURIComponent(task);
+    box.classList.remove('generic');
+  } else if (!issue) {
+    box.textContent = 'No specific task linked — describe what you worked on below.';
+  } else {
+    // Fetch task from issue if we have an issue number but no task param
+    fetchTaskFromIssue(issue).then(t => {
+      if (t) { box.textContent = t; box.classList.remove('generic'); }
+      else    { box.textContent = 'Task from today\'s digest.'; box.classList.remove('generic'); }
+    });
+  }
+}
+
+function formatDate(iso) {
+  try {
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  } catch(e) { return iso; }
+}
+
+async function fetchTaskFromIssue(issueNum) {
+  if (!issueNum || !FEEDBACK_PAT || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') return null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issueNum}`, {
+      headers: { 'Authorization': `token ${FEEDBACK_PAT}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    // Parse task summary from issue body (first non-header line under "Sections Delivered")
+    const match = data.body && data.body.match(/\*\*Action:\*\*\s*(.+)/);
+    return match ? match[1].trim() : null;
+  } catch(e) { return null; }
+}
+
+async function submitFeedback() {
+  const date     = getParam('date') || new Date().toISOString().slice(0,10);
+  const task     = getParam('task') || '';
+  const issue    = getParam('issue') || '';
+  const notes    = document.getElementById('notes').value.trim();
+  const followup = document.getElementById('followup').value.trim();
+  const btn      = document.getElementById('submit-btn');
+  const errEl    = document.getElementById('error-msg');
+
+  btn.disabled  = true;
+  btn.textContent = 'Saving…';
+  errEl.style.display = 'none';
+
+  // Build machine-parseable payload
+  const payload = {
+    completed: true,
+    task_summary: decodeURIComponent(task) || 'Task from digest',
+    notes: notes.slice(0, 500),
+    follow_up: followup.slice(0, 200),
+    date: date,
+    timestamp: new Date().toISOString()
+  };
+
+  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}\n\n---\n*Submitted via Taos Build Intel feedback form*`;
+
+  // If no issue number, we can't post to GitHub — save fallback note
+  if (!issue || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
+    showSuccess();
+    return;
+  }
+
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue}/comments`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${FEEDBACK_PAT}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ body: commentBody })
+    });
+
+    if (r.ok) {
+      showSuccess();
+    } else {
+      const err = await r.json().catch(() => ({}));
+      console.error('GitHub API error:', r.status, err);
+      errEl.textContent = `Could not save to GitHub (${r.status}). Please try again.`;
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = '✅ Mark Done & Save Notes';
+    }
+  } catch(e) {
+    console.error('Network error:', e);
+    errEl.textContent = 'Network error. Please check your connection and try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '✅ Mark Done & Save Notes';
+  }
+}
+
+function showSuccess() {
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('success-view').style.display = 'block';
+}
+
+init();
+</script>
+</body>
+</html>
