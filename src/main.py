@@ -23,7 +23,7 @@ from table_and_fallback_fixes import get_learning_resources_for_day, format_lear
 
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
-RECIPIENT = os.environ.get("RECIPIENT_EMAIL", "RECIPIENT_EMAIL_SECRET")
+RECIPIENT = os.environ.get("RECIPIENT_EMAIL", "")
 SENDER = os.environ.get("SENDER_EMAIL", "")
 PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
