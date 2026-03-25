@@ -315,7 +315,7 @@ FALLBACK_LEARNING_RESOURCES = {
             {
                 'title': 'Crystal Ball Monte Carlo Analysis',
                 'url': 'https://www.oracle.com/applications/crystalball/',
-                'description': 'The tool your advisor (ADVISOR_REDACTED) likely used for 83% confidence analysis. Free trial available.',
+                'description': 'Monte Carlo simulation tool for financial projections. Free trial available.',
                 'type': 'Software'
             },
             {

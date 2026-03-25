@@ -94,7 +94,6 @@
     "rv_budget_max": 45000
   },
   "contacts": {
-    "advisor": "ADVISOR_REDACTED",
     "realtor": "Page Sullivan Group — Berkshire Hathaway Taos — pageandco.com",
     "zook": "Zook Cabins — (717) 859-1610",
     "dc": "DC Structures — (503) 683-3410",
@@ -103,8 +102,5 @@
     "centinel_bank": "Centinel Bank of Taos — 575-758-6700",
     "rural_1st": "Rural 1st — 1-844-GO-RURAL",
     "dimond_mortgage": "Dimond Mortgage Taos — dimondmortgage.com"
-  },
-  "email": {
-    "recipient": "RECIPIENT_EMAIL_SECRET"
   }
 }
