@@ -72,6 +72,21 @@ def recent_context_block(days=7):
         lines.append(line)
     return "RECENT COMPLETED ACTIONS — do NOT suggest repeating these; use notes as context:\n" + "\n".join(lines)
 
+def extract_action_line(content):
+    """Pull just the Action: line from the full AI action-item response."""
+    # Try **Action:** markdown format first
+    match = re.search(r'\*\*Action:\*\*\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()[:160]
+    # Fallback: first meaningful non-label line, strip markdown/HTML
+    for line in content.split('\n'):
+        line = re.sub(r'<[^>]+>', '', line)       # strip HTML
+        line = re.sub(r'\*{1,2}[^*]+\*{1,2}', '', line)  # strip **bold**
+        line = line.strip()
+        if line and len(line) > 15 and not line.startswith('**'):
+            return line[:160]
+    return "Today's action item"
+
 def builder_notes_block():
     """Extract notes from completions that mention known builders."""
     builder_names = [b["name"].lower() for b in C.get("builders", {}).get("active", [])]
@@ -322,13 +337,13 @@ def build_email(S):
     action_content = S.get("action", "")
     sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
 
-    # Feedback button appended to action section (only when we have an issue to log to)
-    if action_content and issue_number:
-        task_snippet = re.sub(r'<[^>]+>', '', action_content)  # strip any HTML
-        task_snippet = re.sub(r'\s+', ' ', task_snippet).strip()[:120]
-        task_enc = urllib.parse.quote(task_snippet)
-        date_str = now_mt().strftime("%Y-%m-%d")
-        feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}&issue={issue_number}"
+    # Feedback button — always shown when there's an action item
+    if action_content:
+        action_line = extract_action_line(action_content)
+        task_enc    = urllib.parse.quote(action_line)
+        date_str    = now_mt().strftime("%Y-%m-%d")
+        issue_param = f"&issue={issue_number}" if issue_number else ""
+        feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
         sec += f'''<div style="margin:-12px 0 18px 17px">
   <a href="{feedback_url}"
      style="display:inline-block;background:#16a34a;color:#fff;padding:9px 20px;border-radius:6px;

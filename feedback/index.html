@@ -225,21 +225,34 @@ async function submitFeedback() {
 
   const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}\n\n---\n*Submitted via Taos Build Intel feedback form*`;
 
-  // If no issue number, we can't post to GitHub — save fallback note
-  if (!issue || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
+  if (FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
     showSuccess();
     return;
   }
 
+  // If no issue number, create a fallback issue to capture the note
+  let url, body;
+  if (issue) {
+    url  = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue}/comments`;
+    body = JSON.stringify({ body: commentBody });
+  } else {
+    url  = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues`;
+    body = JSON.stringify({
+      title: `Feedback: ${date}`,
+      body: commentBody,
+      labels: ['daily-digest', 'tracking', 'feedback-fallback']
+    });
+  }
+
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue}/comments`, {
+    const r = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `token ${FEEDBACK_PAT}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ body: commentBody })
+      body
     });
 
     if (r.ok) {
