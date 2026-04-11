@@ -90,7 +90,7 @@ def recent_context_block(days: int = 7) -> str:
         if c.get("follow_up"):
             line += f"\n  Follow-up needed: {c['follow_up']}"
         lines.append(line)
-    return "RECENT COMPLETED ACTIONS — do NOT suggest repeating these; use notes as context:\n" + "\n".join(lines)
+    return "RECENT COMPLETED ACTIONS — HARD CONSTRAINT: do NOT repeat these tasks. Use notes as context only:\n" + "\n".join(lines)
 
 def extract_action_line(content: str) -> str:
     """Pull just the Action: line from the full AI action-item response."""
@@ -106,6 +106,14 @@ def extract_action_line(content: str) -> str:
         if line and len(line) > 15 and not line.startswith('**'):
             return line[:160]
     return "Today's action item"
+
+def latest_follow_up() -> str:
+    """Return the most recent follow_up from Angela's completions, if any."""
+    for c in recent_completions(days=3):
+        fu = c.get("follow_up", "").strip()
+        if fu:
+            return fu
+    return ""
 
 def builder_notes_block() -> str:
     """Extract notes from completions that mention known builders."""
@@ -223,10 +231,12 @@ SCRIPT = '''Include a "📞 CALLER SCRIPT" section — a 3-sentence phone script
 def p_action() -> str:
     ctx = recent_context_block()
     ctx_section = f"\n\n{ctx}" if ctx else ""
+    fu = latest_follow_up()
+    fu_section = f"\n\nANGELA'S PRIORITY FOLLOW-UP (suggest this first if still relevant): {fu}" if fu else ""
     return ask(f"""One task for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
 Builders: Zook Cabins, Mighty Small Homes, DC Structures.
 Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK, water hookup not needed.
-{ctx_section}
+{ctx_section}{fu_section}
 Format exactly:
 **Action:** [what to do]
 **Contact:** [name, phone/URL]
@@ -237,7 +247,7 @@ Output ONLY the task.""", 512)
 
 def p_land() -> str:
     areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
-    return ask(f"""Land for sale in Taos County NM: {areas}. Min {C['land']['min_acres']} acres, under ${C['land']['max_price']:,}.
+    return ask(f"""Land for sale in Taos County NM: {areas}. Min {CONSTRAINTS['land']['min_acres']} acres, under ${CONSTRAINTS['land']['max_price']:,}.
 Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
 For each: Price | Acres | Location | Water if known | Road | URL.
 Under $50K with water = HIGH PRIORITY. Today: {today()}. Output ONLY listings.""")
@@ -356,17 +366,17 @@ Today: {today()}. Output ONLY the resource.""", 512)
             log.info("Using fallback learning resources")
             day_of_week = now_mt().strftime('%A').lower()
             resources_data = get_learning_resources_for_day(day_of_week)
-            return format_learning_resources(resources_data)
-        
+            return "**[From our library]**\n\n" + format_learning_resources(resources_data)
+
         LEARNING_HIST.append(t)
         if len(LEARNING_HIST) > 60: LEARNING_HIST[:] = LEARNING_HIST[-60:]
         save_json(DATA / "learning_history.json", LEARNING_HIST)
-        return r
+        return "**[Found today]**\n\n" + r
     except Exception as e:
         log.warning(f"Learning resource search failed: {e}, using fallback")
         day_of_week = now_mt().strftime('%A').lower()
         resources_data = get_learning_resources_for_day(day_of_week)
-        return format_learning_resources(resources_data)
+        return "**[From our library]**\n\n" + format_learning_resources(resources_data)
 
 # --- Email ---
 def dashboard() -> str:
@@ -375,12 +385,23 @@ def dashboard() -> str:
     days_left = (target_date - now_mt()).days
     bs = " | ".join(f"{b['name']}: {b['status'].replace('_',' ')}" for b in CONSTRAINTS["builders"]["active"])
 
-    # Recent completions block (last 48 hours)
-    recent = recent_completions(days=2)
+    # 7-day activity log with date grouping
+    recent = recent_completions(days=7)
     completions_html = ""
     if recent:
         rows = []
+        current_date = ""
         for c in recent:
+            c_date = c.get("date", "")
+            if c_date != current_date:
+                current_date = c_date
+                try:
+                    dt_label = datetime.fromisoformat(c_date).strftime("%a %b %d")
+                except ValueError:
+                    dt_label = c_date
+                rows.append(f'<tr><td colspan="2" style="padding:6px 10px 2px;font-weight:700;'
+                            f'font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.04em;'
+                            f'border-top:1px solid #e2e8f0">{dt_label}</td></tr>')
             summary = c.get("task_summary", "Task")[:80]
             notes   = c.get("notes", "")
             note_td = f'<br><span style="color:#64748b;font-size:11px">{notes[:120]}</span>' if notes else ""
@@ -388,13 +409,22 @@ def dashboard() -> str:
                         f'<td style="padding:4px 10px">{summary}{note_td}</td></tr>')
         completions_html = "\n".join(rows) + "\n"
 
+    # Friday-only weekly accomplishment summary
+    weekly_html = ""
+    if now_mt().weekday() == 4 and recent:
+        count = len(recent)
+        weekly_html = (f'<tr><td colspan="2" style="padding:8px 10px;background:#F0FDF4;'
+                       f'font-size:12px;color:#166534;font-weight:600;border-top:1px solid #bbf7d0">'
+                       f'🎉 Weekly recap: {count} task{"s" if count != 1 else ""} completed this week'
+                       f'</td></tr>\n')
+
     return f'''<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:4px">
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${CONSTRAINTS["project"]["committed_spend"]:,}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{CONSTRAINTS["project"]["phase"].replace("_"," ").title()}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{days_left}</td></tr>
-<tr><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}font-weight:600">Builders</td><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent else ""}">{bs}</td></tr>
-{completions_html}</table>'''
+<tr><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent or weekly_html else ""}font-weight:600">Builders</td><td style="padding:4px 10px;{"border-bottom:1px solid #e2e8f0;" if recent or weekly_html else ""}">{bs}</td></tr>
+{completions_html}{weekly_html}</table>'''
 
 def build_email(sections: dict) -> tuple[str, str]:
     dt = now_mt()
@@ -426,14 +456,13 @@ def build_email(sections: dict) -> tuple[str, str]:
     sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
     sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
-    # Feedback button — after dashboard, before research sections
-    if action_content:
-        action_line = extract_action_line(action_content)
-        task_enc    = urllib.parse.quote(action_line)
-        date_str    = now_mt().strftime("%Y-%m-%d")
-        issue_param = f"&issue={issue_number}" if issue_number else ""
-        feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
-        sec += f'''<div style="margin:8px 0 20px 17px">
+    # Feedback button — always shown, even if action or tracking failed
+    action_line = extract_action_line(action_content) if action_content else "Today's task"
+    task_enc    = urllib.parse.quote(action_line)
+    date_str    = now_mt().strftime("%Y-%m-%d")
+    issue_param = f"&issue={issue_number}" if issue_number else ""
+    feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
+    sec += f'''<div style="margin:8px 0 20px 17px">
   <a href="{feedback_url}"
      style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:6px;
             text-decoration:none;font-size:14px;font-weight:600;min-height:44px">
