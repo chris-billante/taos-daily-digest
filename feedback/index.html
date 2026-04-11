@@ -153,15 +153,6 @@
     .status-btn.active-in_progress { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
     .status-btn.active-waiting    { background: #fef3c7; border-color: #d97706; color: #92400e; }
     .status-btn.active-blocked    { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
-    .demo-warning {
-      background: #FEF3C7;
-      border-left: 3px solid #d97706;
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: 13px;
-      color: #92400e;
-      margin-bottom: 14px;
-    }
   </style>
 </head>
 <body>
@@ -185,9 +176,6 @@
       <button type="button" class="status-btn" data-status="blocked" onclick="setStatus('blocked')">Blocked</button>
     </div>
 
-    <div id="demo-warning" class="demo-warning" style="display:none">
-      Demo mode — feedback will not be saved. The form is functional once deployed via GitHub Pages.
-    </div>
 
     <div class="label">What did you find out? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
     <textarea id="notes" placeholder="Pricing, lead times, next steps…" rows="4" maxlength="500"></textarea>
@@ -287,12 +275,6 @@ function init() {
   const date  = getParam('date');
   const task  = getParam('task');
   const issue = getParam('issue');
-  const isDemo = FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER';
-
-  if (isDemo) {
-    document.getElementById('demo-warning').style.display = 'block';
-  }
-
   if (date) {
     const chip = document.getElementById('date-chip');
     chip.textContent = formatDate(date);
