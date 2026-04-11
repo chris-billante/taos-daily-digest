@@ -194,9 +194,14 @@ def build_tracking_footer(issue_number: int, repo_owner: str, repo_name: str) ->
                 ✅ Mark Actions Complete
             </a>
             
-            <a href="{issue_url}#new_comment_field" 
+            <a href="{issue_url}#new_comment_field"
                style="display: inline-block; background: #b45309; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
                 💬 Add Feedback
+            </a>
+
+            <a href="https://{repo_owner}.github.io/{repo_name}/journal/"
+               style="display: inline-block; background: #7c3aed; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
+                📓 My Journal
             </a>
         </div>
         

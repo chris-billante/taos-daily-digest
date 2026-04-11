@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'feedback/index.html'
+      - 'journal/index.html'
   workflow_dispatch: # Manual trigger when token is rotated
 
 permissions:
@@ -28,18 +29,20 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Build feedback form (inject token — never committed to git)
+      - name: Build pages (inject token — never committed to git)
         env:
           GH_FEEDBACK_TOKEN: ${{ secrets.GH_FEEDBACK_TOKEN }}
         run: |
-          mkdir -p _site/feedback
+          mkdir -p _site/feedback _site/journal
           # Replace placeholder with actual secret — output goes to _site, NOT back to source
           sed "s/FEEDBACK_PAT_PLACEHOLDER/${GH_FEEDBACK_TOKEN}/g" \
             feedback/index.html > _site/feedback/index.html
-          echo "✅ Feedback form built with injected token"
-          # Sanity check: confirm placeholder was replaced
-          if grep -q "FEEDBACK_PAT_PLACEHOLDER" _site/feedback/index.html; then
-            echo "❌ ERROR: Placeholder was not replaced — GH_FEEDBACK_TOKEN may be empty"
+          sed "s/FEEDBACK_PAT_PLACEHOLDER/${GH_FEEDBACK_TOKEN}/g" \
+            journal/index.html > _site/journal/index.html
+          echo "Feedback form + journal built with injected token"
+          # Sanity check: confirm placeholder was replaced in both
+          if grep -q "FEEDBACK_PAT_PLACEHOLDER" _site/feedback/index.html _site/journal/index.html; then
+            echo "ERROR: Placeholder was not replaced — GH_FEEDBACK_TOKEN may be empty"
             exit 1
           fi
 

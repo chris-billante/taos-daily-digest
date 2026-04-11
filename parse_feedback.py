@@ -193,6 +193,10 @@ def main():
             if data.get("follow_up"):
                 data["follow_up"] = str(data["follow_up"])[:200]
 
+            # Backward compat: derive status from completed if missing
+            if "status" not in data:
+                data["status"] = "done" if data.get("completed", True) else "in_progress"
+
             if task_id in existing_by_id:
                 # Update if this comment is newer
                 existing_entry = existing_by_id[task_id]

@@ -128,6 +128,31 @@
     }
     .char-counter.amber { color: #d97706; }
     .char-counter.red { color: #dc2626; font-weight: 600; }
+    .status-group {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .status-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 4px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      color: #64748b;
+    }
+    .status-btn:hover { border-color: #94a3b8; }
+    .status-btn.active-done       { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+    .status-btn.active-in_progress { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
+    .status-btn.active-waiting    { background: #fef3c7; border-color: #d97706; color: #92400e; }
+    .status-btn.active-blocked    { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
     .demo-warning {
       background: #FEF3C7;
       border-left: 3px solid #d97706;
@@ -152,6 +177,14 @@
     <div class="label">Today's Task</div>
     <div id="task-box" class="task-box generic">Loading task…</div>
 
+    <div class="label">Status</div>
+    <div class="status-group" id="status-group">
+      <button type="button" class="status-btn active-done" data-status="done" onclick="setStatus('done')">Done</button>
+      <button type="button" class="status-btn" data-status="in_progress" onclick="setStatus('in_progress')">In Progress</button>
+      <button type="button" class="status-btn" data-status="waiting" onclick="setStatus('waiting')">Waiting</button>
+      <button type="button" class="status-btn" data-status="blocked" onclick="setStatus('blocked')">Blocked</button>
+    </div>
+
     <div id="demo-warning" class="demo-warning" style="display:none">
       Demo mode — feedback will not be saved. The form is functional once deployed via GitHub Pages.
     </div>
@@ -164,7 +197,7 @@
     <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px" maxlength="200"></textarea>
     <div class="char-counter" id="followup-counter">0 / 200</div>
 
-    <button class="btn" id="submit-btn" onclick="submitFeedback()">✅ Mark Done &amp; Save Notes</button>
+    <button class="btn" id="submit-btn" onclick="submitFeedback()">Mark Done & Save Notes</button>
     <div class="error-msg" id="error-msg">Something went wrong. Please try again or email Chris directly.</div>
   </div>
 
@@ -175,14 +208,16 @@
     <p>Your notes are saved. They'll show up in tomorrow's digest.</p>
     <p id="saved-time" style="font-size:12px;color:#16a34a;margin-top:6px"></p>
     <hr class="divider">
-    <p style="font-size:12px;color:#94a3b8">You can close this tab.</p>
+    <p style="font-size:12px;color:#94a3b8">You can close this tab or
+      <a href="journal/" style="color:#2563EB;text-decoration:underline">view your journal</a>.</p>
   </div>
 </div>
 
 <script>
 const FEEDBACK_PAT = 'FEEDBACK_PAT_PLACEHOLDER';
 const REPO_OWNER   = 'chris-billante';
-const REPO_NAME    = 'taos-feedback-private';
+const FEEDBACK_REPO = 'taos-feedback-private';
+const DIGEST_REPO   = 'taos-daily-digest';
 const DRAFT_KEY    = 'taos-feedback-draft';
 
 function getParam(name) {
@@ -230,6 +265,22 @@ function restoreDraft() {
 
 function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch(e) {}
+}
+
+let currentStatus = 'done';
+
+function setStatus(status) {
+  currentStatus = status;
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    const s = btn.dataset.status;
+    btn.className = 'status-btn' + (s === status ? ` active-${s}` : '');
+  });
+  // Update submit button text based on status
+  const submitBtn = document.getElementById('submit-btn');
+  if (!submitBtn.disabled) {
+    const labels = { done: 'Mark Done & Save Notes', in_progress: 'Save Progress', waiting: 'Save & Mark Waiting', blocked: 'Save & Mark Blocked' };
+    submitBtn.textContent = labels[status] || 'Save Notes';
+  }
 }
 
 function init() {
@@ -282,7 +333,8 @@ function formatDate(iso) {
 async function fetchTaskFromIssue(issueNum) {
   if (!issueNum || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') return null;
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issueNum}`, {
+    // Tracking issues live in the digest repo, not the feedback repo
+    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DIGEST_REPO}/issues/${issueNum}`, {
       headers: { 'Authorization': `token ${FEEDBACK_PAT}`, 'Accept': 'application/vnd.github.v3+json' }
     });
     if (!r.ok) return null;
@@ -315,7 +367,8 @@ async function submitFeedback() {
   errEl.style.display = 'none';
 
   const payload = {
-    completed: true,
+    completed: currentStatus === 'done',
+    status: currentStatus,
     task_summary: decodeURIComponent(task) || 'Task from digest',
     notes: notes.slice(0, 500),
     follow_up: followup.slice(0, 200),
@@ -323,25 +376,22 @@ async function submitFeedback() {
     timestamp: new Date().toISOString()
   };
 
-  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}\n\n---\n*Submitted via Taos Build Intel feedback form*`;
+  const taskShort = payload.task_summary.slice(0, 50);
+  const crossRef = issue ? `\n\nTracking issue: ${REPO_OWNER}/${DIGEST_REPO}#${issue}` : '';
+  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}${crossRef}\n\n---\n*Submitted via Taos Build Intel feedback form*`;
 
   if (FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
     showSuccess();
     return;
   }
 
-  let url, body;
-  if (issue) {
-    url  = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue}/comments`;
-    body = JSON.stringify({ body: commentBody });
-  } else {
-    url  = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues`;
-    body = JSON.stringify({
-      title: `Feedback: ${date}`,
-      body: commentBody,
-      labels: ['daily-digest', 'tracking', 'feedback-fallback']
-    });
-  }
+  // Always create issues in the feedback repo (never comment on cross-repo issues)
+  const url  = `https://api.github.com/repos/${REPO_OWNER}/${FEEDBACK_REPO}/issues`;
+  const body = JSON.stringify({
+    title: `Feedback: ${date} — ${taskShort}`,
+    body: commentBody,
+    labels: ['daily-digest', 'tracking']
+  });
 
   try {
     const r = await postWithRetry(url, {

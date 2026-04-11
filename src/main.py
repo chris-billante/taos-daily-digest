@@ -84,13 +84,14 @@ def recent_context_block(days: int = 7) -> str:
         return ""
     lines = []
     for c in completions:
-        line = f"- {c['date']}: COMPLETED '{c.get('task_summary', 'a task')}'"
+        status = c.get("status", "done").upper()
+        line = f"- {c['date']}: [{status}] '{c.get('task_summary', 'a task')}'"
         if c.get("notes"):
             line += f"\n  Angela's notes: {c['notes']}"
         if c.get("follow_up"):
             line += f"\n  Follow-up needed: {c['follow_up']}"
         lines.append(line)
-    return "RECENT COMPLETED ACTIONS — HARD CONSTRAINT: do NOT repeat these tasks. Use notes as context only:\n" + "\n".join(lines)
+    return "RECENT ACTIONS — HARD CONSTRAINT: do NOT repeat DONE tasks. IN_PROGRESS/WAITING items may need follow-up. Use notes as context:\n" + "\n".join(lines)
 
 def extract_action_line(content: str) -> str:
     """Pull just the Action: line from the full AI action-item response."""
@@ -405,17 +406,32 @@ def dashboard() -> str:
             summary = c.get("task_summary", "Task")[:80]
             notes   = c.get("notes", "")
             note_td = f'<br><span style="color:#64748b;font-size:11px">{notes[:120]}</span>' if notes else ""
-            rows.append(f'<tr><td style="padding:4px 10px;font-weight:600;color:#16a34a">✅ Done</td>'
+            status = c.get("status", "done")
+            status_map = {
+                "done":        ("✅", "#16a34a", "Done"),
+                "in_progress": ("🔄", "#2563eb", "In Progress"),
+                "waiting":     ("⏳", "#d97706", "Waiting"),
+                "blocked":     ("🚫", "#dc2626", "Blocked"),
+            }
+            icon, color, label = status_map.get(status, ("✅", "#16a34a", "Done"))
+            rows.append(f'<tr><td style="padding:4px 10px;font-weight:600;color:{color}">{icon} {label}</td>'
                         f'<td style="padding:4px 10px">{summary}{note_td}</td></tr>')
         completions_html = "\n".join(rows) + "\n"
 
     # Friday-only weekly accomplishment summary
     weekly_html = ""
     if now_mt().weekday() == 4 and recent:
-        count = len(recent)
+        done_count = sum(1 for c in recent if c.get("status", "done") == "done")
+        active_count = len(recent) - done_count
+        parts = []
+        if done_count:
+            parts.append(f"{done_count} done")
+        if active_count:
+            parts.append(f"{active_count} in progress")
+        recap = " · ".join(parts) if parts else f"{len(recent)} items"
         weekly_html = (f'<tr><td colspan="2" style="padding:8px 10px;background:#F0FDF4;'
                        f'font-size:12px;color:#166534;font-weight:600;border-top:1px solid #bbf7d0">'
-                       f'🎉 Weekly recap: {count} task{"s" if count != 1 else ""} completed this week'
+                       f'Weekly recap: {recap}'
                        f'</td></tr>\n')
 
     return f'''<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:4px">
