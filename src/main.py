@@ -183,47 +183,89 @@ def markdown_to_html(text: str) -> str:
         r'<a href="\1" style="color:#2563EB;text-decoration:underline">\1</a>', text)
     return text
 
+def content_to_html(content: str) -> str:
+    """Convert markdown-ish AI response content to email-safe HTML."""
+    content = clean_response(content)
+    if not content:
+        return ""
+    lines = content.split("\n")
+    html: list[str] = []
+    ltag: str | None = None
+    def cl():
+        nonlocal ltag
+        if ltag:
+            html.append(f"</{ltag}>")
+            ltag = None
+    for raw in lines:
+        s = raw.strip()
+        if not s:
+            cl()
+            continue
+        if s in ("-", "*", "•"):
+            continue
+        s = markdown_to_html(s)
+        if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
+            cl()
+            html.append(
+                f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;'
+                f'padding:8px 12px;border-left:3px solid #dc2626;border-radius:4px;'
+                f'margin:8px 0;font-size:14px">{s}</div>')
+        elif s.startswith("### "):
+            cl()
+            html.append(
+                f'<div style="color:#2D6A4F;font-size:13px;font-weight:700;'
+                f'margin:12px 0 4px;text-transform:uppercase;letter-spacing:0.03em">'
+                f'{s[4:]}</div>')
+        elif s.startswith("## "):
+            cl()
+            html.append(
+                f'<div style="color:#1B3A5C;font-size:15px;font-weight:700;'
+                f'margin:14px 0 6px;padding-bottom:4px;'
+                f'border-bottom:2px solid #E2E8F0">{s[3:]}</div>')
+        elif re.match(r'^\d+\.\s', s):
+            if ltag != "ol":
+                cl()
+                html.append('<ol style="margin:6px 0;padding-left:24px">')
+                ltag = "ol"
+            itxt = re.sub(r'^[0-9]+[.]\s*', '', s)
+            html.append(f'<li style="margin-bottom:4px;line-height:1.5">{itxt}</li>')
+        elif s.startswith("- ") or s.startswith("* "):
+            if ltag != "ul":
+                cl()
+                html.append('<ul style="margin:6px 0;padding-left:24px">')
+                ltag = "ul"
+            html.append(f'<li style="margin-bottom:4px;line-height:1.5">{s[2:]}</li>')
+        elif s.lower().startswith("📞") or "caller script" in s.lower():
+            cl()
+            html.append(
+                f'<div style="background:#EFF6FF;border-left:3px solid #3B82F6;'
+                f'padding:10px 14px;margin:10px 0;border-radius:4px;'
+                f'font-style:italic;font-size:14px;line-height:1.5">{s}</div>')
+        else:
+            cl()
+            html.append(f'<p style="margin:4px 0;line-height:1.6;font-size:14px">{s}</p>')
+    cl()
+    return "\n".join(html)
+
+
 def section(anchor: str, emoji: str, title: str, content: str,
             border_color: str = "#1B3A5C", raw_html: bool = False) -> str:
-    if not content: return ""
-    if raw_html:
-        body = content.strip()
-    else:
-        content = clean_response(content)
-        if not content: return ""
-        lines = content.split("\n")
-        html, ltag = [], None
-        def cl():
-            nonlocal ltag
-            if ltag: html.append(f"</{ltag}>"); ltag = None
-        for raw in lines:
-            s = raw.strip()
-            if not s: cl(); continue
-            if s in ("-","*","•"): continue
-            s = markdown_to_html(s)
-            if "HIGH PRIORITY" in s.upper() or s.startswith("🔴"):
-                cl(); html.append(f'<div style="color:#dc2626;font-weight:600;background:#FEF2F2;padding:6px 10px;border-left:3px solid #dc2626;border-radius:3px;margin:6px 0">{s}</div>')
-            elif s.startswith("### "):
-                cl(); html.append(f'<div style="color:#2D6A4F;font-size:13px;font-weight:600;margin:10px 0 3px">{s[4:]}</div>')
-            elif s.startswith("## "):
-                cl(); html.append(f'<div style="color:#1B3A5C;font-size:14px;font-weight:600;margin:12px 0 4px;padding-bottom:2px;border-bottom:1px solid #E2E8F0">{s[3:]}</div>')
-            elif re.match(r'^\d+\.\s', s):
-                if ltag != "ol": cl(); html.append('<ol style="margin:4px 0;padding-left:22px">'); ltag = "ol"
-                itxt = re.sub(r'^[0-9]+[.]\s*', '', s)
-                html.append(f'<li style="margin-bottom:3px">{itxt}</li>')
-            elif s.startswith("- ") or s.startswith("* "):
-                if ltag != "ul": cl(); html.append('<ul style="margin:4px 0;padding-left:22px">'); ltag = "ul"
-                html.append(f'<li style="margin-bottom:3px">{s[2:]}</li>')
-            elif s.lower().startswith("📞") or "caller script" in s.lower():
-                cl(); html.append(f'<div style="background:#EFF6FF;border-left:3px solid #3B82F6;padding:8px 12px;margin:8px 0;border-radius:3px;font-style:italic;font-size:14px">{s}</div>')
-            else:
-                cl(); html.append(f'<p style="margin:3px 0;line-height:1.5">{s}</p>')
-        cl()
-        body = "\n".join(html)
-    return f'''<div id="{anchor}" style="margin-bottom:20px;border-left:3px solid {border_color};padding-left:14px">
-  <div style="font-size:16px;font-weight:600;color:{border_color};margin-bottom:6px">{emoji} {title}</div>
-  <div style="font-size:14px;color:#334155;line-height:1.5">{body}</div>
-</div>'''
+    """Render an email section as a styled card."""
+    if not content:
+        return ""
+    body = content.strip() if raw_html else content_to_html(content)
+    if not body:
+        return ""
+    return f'''<table id="{anchor}" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="margin-bottom:16px;border-collapse:collapse">
+<tr><td style="background:{border_color};height:4px;border-radius:6px 6px 0 0" colspan="2"></td></tr>
+<tr><td style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:16px 18px">
+  <div style="font-size:17px;font-weight:700;color:{border_color};margin-bottom:10px">
+    {emoji} {title}
+  </div>
+  <div style="color:#334155;line-height:1.6">{body}</div>
+</td></tr>
+</table>'''
 
 # --- Prompts ---
 SCRIPT = '''Include a "📞 CALLER SCRIPT" section — a 3-sentence phone script my wife Angela can read:
@@ -466,52 +508,101 @@ def build_email(sections: dict) -> tuple[str, str]:
     except Exception as e:
         log.warning(f"Tracking issue skipped: {e}")
 
-    # Build sections — order: Action → Dashboard → Button → Research → Learn
-    sec = ""
+    # Build sections
     action_content = sections.get("action", "")
-    sec += section("action", "🔑", "TODAY'S ACTION ITEM", action_content, "#2563EB")
-    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
-    # Feedback button — always shown, even if action or tracking failed
+    # Feedback button URL
     action_line = extract_action_line(action_content) if action_content else "Today's task"
     task_enc    = urllib.parse.quote(action_line)
     date_str    = now_mt().strftime("%Y-%m-%d")
     issue_param = f"&issue={issue_number}" if issue_number else ""
     feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
-    sec += f'''<div style="margin:8px 0 20px 17px">
-  <a href="{feedback_url}"
-     style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:6px;
-            text-decoration:none;font-size:14px;font-weight:600;min-height:44px">
-    ✅ Mark Done &amp; Add Notes
-  </a>
-</div>'''
+    journal_url  = f"https://{REPO_OWNER}.github.io/{REPO_NAME}/journal/"
 
-    sec += section("land", "🏜️", "LAND LISTINGS", sections.get("land",""), "#D97706")
-    sec += section("builders", "🏠", "BUILDER INTEL", sections.get("builders",""), "#059669")
-    sec += section("offgrid", "⚡", "OFF-GRID NEWS & HOUSING IDEAS", sections.get("offgrid",""), "#7C3AED")
-    sec += section("tacoma", "🚐", "TACOMA HUNTER & VAN MARKET", sections.get("vehicles",""), "#64748B")
-    sec += section("bridge", "🏕️", "BRIDGE HOUSING & RENTALS", sections.get("bridge",""), "#64748B")
-    sec += section("learn", "📚", "LEARNING RESOURCE", sections.get("learning",""), "#64748B")
-
-    # Visual TOC (non-clickable — anchor links break in Gmail/Outlook)
-    toc_items = ["🔑 Action", "📊 Dashboard", "🏜️ Land", "🏠 Builders",
-                 "⚡ Off-Grid", "🚐 Tacoma", "🏕️ Housing", "📚 Learn"]
-    toc = " &nbsp;·&nbsp; ".join(
-        f'<span style="color:#fff;font-size:12px">{t}</span>' for t in toc_items)
-
-    html = f'''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:0 auto;padding:12px;background:#fff">
-<div style="background:#1B3A5C;background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;padding:14px 18px;border-radius:6px 6px 0 0">
-  <div style="font-size:18px;font-weight:700">🏔️ Taos Build Intel</div>
-  <div style="font-size:12px;opacity:0.85;margin:2px 0 8px">{dt.strftime("%A, %B %d, %Y")} | $350K All-In | Pre-Land Phase</div>
-  <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:6px">{toc}</div>
-</div>
-<div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:16px">
-  {sec}
-  <div style="margin-top:14px;padding:8px;background:#f8fafc;border-radius:4px;font-size:11px;color:#7B8BA8;text-align:center">
-    Taos Off-Grid Homestead | Daily Briefing v4.0
+    # Hero action card — prominent, separate from other sections
+    action_body = content_to_html(action_content) if action_content else "<p>No action item today.</p>"
+    hero = f'''<table id="action" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="margin-bottom:16px;border-collapse:collapse">
+<tr><td style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:8px;padding:20px 22px">
+  <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;
+    letter-spacing:0.08em;margin-bottom:6px">TODAY'S ACTION ITEM</div>
+  <div style="color:#fff;font-size:15px;line-height:1.6;margin-bottom:16px">{action_body}</div>
+  <div>
+    <a href="{feedback_url}"
+       style="display:inline-block;background:#16a34a;color:#fff;padding:12px 28px;border-radius:6px;
+              text-decoration:none;font-size:15px;font-weight:700;min-height:44px">
+      Mark Done &amp; Add Notes
+    </a>
   </div>
-</div></body></html>'''
+</td></tr></table>'''
+
+    # Research sections
+    sec = ""
+    sec += section("land", "🏜️", "LAND LISTINGS", sections.get("land",""), "#b45309")
+    sec += section("builders", "🏠", "BUILDER INTEL", sections.get("builders",""), "#059669")
+    sec += section("offgrid", "⚡", "OFF-GRID & HOUSING", sections.get("offgrid",""), "#7C3AED")
+    sec += section("tacoma", "🚐", "TACOMA & VAN MARKET", sections.get("vehicles",""), "#475569")
+    sec += section("bridge", "🏕️", "BRIDGE HOUSING", sections.get("bridge",""), "#0e7490")
+    sec += section("learn", "📚", "LEARNING RESOURCE", sections.get("learning",""), "#6d28d9")
+    sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
+
+    # TOC with clickable anchor links
+    toc_links = [
+        ("action", "🔑 Action"), ("land", "🏜️ Land"), ("builders", "🏠 Builders"),
+        ("offgrid", "⚡ Off-Grid"), ("tacoma", "🚐 Tacoma"), ("bridge", "🏕️ Housing"),
+        ("learn", "📚 Learn"), ("dash", "📊 Dashboard")]
+    toc = " &nbsp;&middot;&nbsp; ".join(
+        f'<a href="#{a}" style="color:#fff;text-decoration:none;font-size:12px;'
+        f'font-weight:500;opacity:0.9">{lbl}</a>' for a, lbl in toc_links)
+
+    html = f'''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  max-width:640px;margin:0 auto;padding:0;background:#f0f4f8">
+
+<!-- Header -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
+<tr><td style="background:linear-gradient(135deg,#1B3A5C,#2D6A4F);color:#fff;
+  padding:20px 24px 14px;border-radius:8px 8px 0 0">
+  <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">🏔️ Taos Build Intel</div>
+  <div style="font-size:13px;opacity:0.8;margin:4px 0 12px">
+    {dt.strftime("%A, %B %d, %Y")} &nbsp;|&nbsp; $350K All-In &nbsp;|&nbsp; Pre-Land Phase
+  </div>
+  <div style="border-top:1px solid rgba(255,255,255,0.25);padding-top:8px;line-height:1.8">
+    {toc}
+  </div>
+</td></tr></table>
+
+<!-- Body -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
+<tr><td style="background:#f0f4f8;padding:16px 12px 8px">
+
+  {hero}
+  {sec}
+
+  <!-- Quick links -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="margin:8px 0 12px;border-collapse:collapse">
+  <tr>
+    <td style="text-align:center;padding:12px">
+      <a href="{journal_url}"
+         style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 22px;
+                border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;
+                margin:0 4px">📓 My Journal</a>
+      <a href="{feedback_url}"
+         style="display:inline-block;background:#16a34a;color:#fff;padding:10px 22px;
+                border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;
+                margin:0 4px">Add Notes</a>
+    </td>
+  </tr></table>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding:10px;font-size:11px;color:#94a3b8">
+    Taos Off-Grid Homestead &nbsp;|&nbsp; Daily Briefing v5.0
+  </div>
+
+</td></tr></table>
+</body></html>'''
     
     # v4.0: Add tracking footer if issue was created
     if issue_number and tracker:

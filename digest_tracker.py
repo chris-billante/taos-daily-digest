@@ -171,45 +171,12 @@ class DigestTracker:
 
 
 def build_tracking_footer(issue_number: int, repo_owner: str, repo_name: str) -> str:
-    """
-    Build HTML footer with action tracking buttons.
-    """
+    """Build compact tracking footer for the email."""
     issue_url = f"https://github.com/{repo_owner}/{repo_name}/issues/{issue_number}"
-    
-    footer_html = f'''
-    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-top: 30px;">
-        <h3 style="margin-top: 0; color: #2c3e50;">Track Your Progress</h3>
-        <p style="color: #6c757d; margin-bottom: 15px;">
-            Use the buttons below to track actions and provide feedback on today's digest.
-        </p>
-        
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <a href="{issue_url}" 
-               style="display: inline-block; background: #3498db; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-                📋 View Tracking Issue
-            </a>
-            
-            <a href="{issue_url}#new_comment_field" 
-               style="display: inline-block; background: #2ecc71; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-                ✅ Mark Actions Complete
-            </a>
-            
-            <a href="{issue_url}#new_comment_field"
-               style="display: inline-block; background: #b45309; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-                💬 Add Feedback
-            </a>
-
-            <a href="https://{repo_owner}.github.io/{repo_name}/journal/"
-               style="display: inline-block; background: #7c3aed; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-                📓 My Journal
-            </a>
-        </div>
-        
-        <p style="color: #6c757d; font-size: 13px; margin-top: 15px; margin-bottom: 0;">
-            Click any button to open the tracking issue in GitHub. Check off completed items, add comments, 
-            or close the issue when you're done with today's digest.
-        </p>
-    </div>
-    '''
-    
-    return footer_html
+    return f'''
+<table width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="margin:4px 0 8px;border-collapse:collapse">
+<tr><td style="text-align:center;padding:8px;font-size:11px;color:#94a3b8">
+  <a href="{issue_url}" style="color:#64748b;text-decoration:underline;font-size:11px">
+    Tracking issue #{issue_number}</a>
+</td></tr></table>'''
