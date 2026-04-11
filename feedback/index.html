@@ -119,6 +119,24 @@
       margin-bottom: 12px;
     }
     .divider { border: none; border-top: 1px solid #e2e8f0; margin: 18px 0; }
+    .char-counter {
+      font-size: 11px;
+      text-align: right;
+      margin-top: -10px;
+      margin-bottom: 14px;
+      color: #94a3b8;
+    }
+    .char-counter.amber { color: #d97706; }
+    .char-counter.red { color: #dc2626; font-weight: 600; }
+    .demo-warning {
+      background: #FEF3C7;
+      border-left: 3px solid #d97706;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 14px;
+    }
   </style>
 </head>
 <body>
@@ -134,11 +152,17 @@
     <div class="label">Today's Task</div>
     <div id="task-box" class="task-box generic">Loading task…</div>
 
+    <div id="demo-warning" class="demo-warning" style="display:none">
+      Demo mode — feedback will not be saved. The form is functional once deployed via GitHub Pages.
+    </div>
+
     <div class="label">What did you find out? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
-    <textarea id="notes" placeholder="Pricing, lead times, next steps…" rows="4"></textarea>
+    <textarea id="notes" placeholder="Pricing, lead times, next steps…" rows="4" maxlength="500"></textarea>
+    <div class="char-counter" id="notes-counter">0 / 500</div>
 
     <div class="label">Next step or follow-up?</div>
-    <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px"></textarea>
+    <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px" maxlength="200"></textarea>
+    <div class="char-counter" id="followup-counter">0 / 200</div>
 
     <button class="btn" id="submit-btn" onclick="submitFeedback()">✅ Mark Done &amp; Save Notes</button>
     <div class="error-msg" id="error-msg">Something went wrong. Please try again or email Chris directly.</div>
@@ -149,27 +173,74 @@
     <h2>Logged!</h2>
     <p><strong id="success-task"></strong></p>
     <p>Your notes are saved. They'll show up in tomorrow's digest.</p>
+    <p id="saved-time" style="font-size:12px;color:#16a34a;margin-top:6px"></p>
     <hr class="divider">
     <p style="font-size:12px;color:#94a3b8">You can close this tab.</p>
   </div>
 </div>
 
 <script>
-// Fine-grained PAT with Issues:Write scope on taos-daily-digest only.
-// This token cannot read code, only comment on issues in this one repo.
-// Replace FEEDBACK_PAT_PLACEHOLDER with the actual token after generating it in GitHub.
 const FEEDBACK_PAT = 'FEEDBACK_PAT_PLACEHOLDER';
 const REPO_OWNER   = 'chris-billante';
 const REPO_NAME    = 'taos-feedback-private';
+const DRAFT_KEY    = 'taos-feedback-draft';
 
 function getParam(name) {
   return new URLSearchParams(window.location.search).get(name) || '';
+}
+
+// --- Character counters ---
+function setupCounter(textareaId, counterId, max) {
+  const ta = document.getElementById(textareaId);
+  const counter = document.getElementById(counterId);
+  function update() {
+    const len = ta.value.length;
+    counter.textContent = `${len} / ${max}`;
+    counter.className = 'char-counter' +
+      (len > max * 0.95 ? ' red' : len > max * 0.8 ? ' amber' : '');
+  }
+  ta.addEventListener('input', update);
+  update();
+}
+
+// --- localStorage draft persistence ---
+function saveDraft() {
+  const draft = {
+    notes: document.getElementById('notes').value,
+    followup: document.getElementById('followup').value,
+    date: getParam('date'),
+    ts: Date.now()
+  };
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch(e) {}
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    // Only restore if same day or less than 24h old
+    const age = Date.now() - (draft.ts || 0);
+    if (age > 86400000) { localStorage.removeItem(DRAFT_KEY); return; }
+    if (draft.date && getParam('date') && draft.date !== getParam('date')) return;
+    if (draft.notes) document.getElementById('notes').value = draft.notes;
+    if (draft.followup) document.getElementById('followup').value = draft.followup;
+  } catch(e) {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch(e) {}
 }
 
 function init() {
   const date  = getParam('date');
   const task  = getParam('task');
   const issue = getParam('issue');
+  const isDemo = FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER';
+
+  if (isDemo) {
+    document.getElementById('demo-warning').style.display = 'block';
+  }
 
   if (date) {
     const chip = document.getElementById('date-chip');
@@ -184,12 +255,21 @@ function init() {
   } else if (!issue) {
     box.textContent = 'No specific task linked — describe what you worked on below.';
   } else {
-    // Fetch task from issue if we have an issue number but no task param
     fetchTaskFromIssue(issue).then(t => {
       if (t) { box.textContent = t; box.classList.remove('generic'); }
       else    { box.textContent = 'Task from today\'s digest.'; box.classList.remove('generic'); }
     });
   }
+
+  setupCounter('notes', 'notes-counter', 500);
+  setupCounter('followup', 'followup-counter', 200);
+  restoreDraft();
+  // Re-run counters after restore
+  document.getElementById('notes').dispatchEvent(new Event('input'));
+  document.getElementById('followup').dispatchEvent(new Event('input'));
+  // Auto-save drafts on input
+  document.getElementById('notes').addEventListener('input', saveDraft);
+  document.getElementById('followup').addEventListener('input', saveDraft);
 }
 
 function formatDate(iso) {
@@ -200,17 +280,25 @@ function formatDate(iso) {
 }
 
 async function fetchTaskFromIssue(issueNum) {
-  if (!issueNum || !FEEDBACK_PAT || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') return null;
+  if (!issueNum || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') return null;
   try {
     const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issueNum}`, {
       headers: { 'Authorization': `token ${FEEDBACK_PAT}`, 'Accept': 'application/vnd.github.v3+json' }
     });
     if (!r.ok) return null;
     const data = await r.json();
-    // Parse task summary from issue body (first non-header line under "Sections Delivered")
     const match = data.body && data.body.match(/\*\*Action:\*\*\s*(.+)/);
     return match ? match[1].trim() : null;
   } catch(e) { return null; }
+}
+
+async function postWithRetry(url, options) {
+  const r = await fetch(url, options);
+  if (r.status >= 500) {
+    await new Promise(res => setTimeout(res, 2000));
+    return fetch(url, options);
+  }
+  return r;
 }
 
 async function submitFeedback() {
@@ -226,7 +314,6 @@ async function submitFeedback() {
   btn.innerHTML = '<span class="spinner"></span> Saving…';
   errEl.style.display = 'none';
 
-  // Build machine-parseable payload
   const payload = {
     completed: true,
     task_summary: decodeURIComponent(task) || 'Task from digest',
@@ -243,7 +330,6 @@ async function submitFeedback() {
     return;
   }
 
-  // If no issue number, create a fallback issue to capture the note
   let url, body;
   if (issue) {
     url  = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue}/comments`;
@@ -258,7 +344,7 @@ async function submitFeedback() {
   }
 
   try {
-    const r = await fetch(url, {
+    const r = await postWithRetry(url, {
       method: 'POST',
       headers: {
         'Authorization': `token ${FEEDBACK_PAT}`,
@@ -269,13 +355,14 @@ async function submitFeedback() {
     });
 
     if (r.ok) {
+      clearDraft();
       showSuccess();
     } else {
       console.error('GitHub API error:', r.status);
       if (r.status === 401 || r.status === 403) {
         errEl.textContent = 'Permission error — please let Chris know.';
       } else if (r.status >= 500) {
-        errEl.textContent = 'GitHub is having issues. Try again in a minute.';
+        errEl.textContent = 'GitHub is having issues. Retry failed — try again later.';
       } else {
         errEl.textContent = 'Could not save. Please try again or text Chris.';
       }
@@ -296,6 +383,9 @@ function showSuccess() {
   const task = getParam('task');
   const taskText = task ? decodeURIComponent(task) : 'your task';
   document.getElementById('success-task').textContent = taskText;
+  const now = new Date();
+  document.getElementById('saved-time').textContent =
+    `Saved at ${now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}`;
   document.getElementById('form-view').style.display = 'none';
   document.getElementById('success-view').style.display = 'block';
 }
