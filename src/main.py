@@ -16,6 +16,7 @@ import smtplib
 import sys
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -36,7 +37,7 @@ PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = 2048
-DELAY = int(os.environ.get("INTER_CALL_DELAY", "30"))
+DELAY = int(os.environ.get("INTER_CALL_DELAY", "5"))
 REPO_OWNER = os.environ.get("REPO_OWNER", "chris-billante")
 REPO_NAME = os.environ.get("REPO_NAME", "taos-daily-digest")
 FEEDBACK_BASE_URL = os.environ.get(
@@ -751,15 +752,27 @@ def main() -> None:
         ("bridge",   "Bridge",    p_bridge),
         ("learning", "Learning",  p_learn),
     ]
-    for key, label, fn in streams:
+
+    def _run_stream(
+        key: str, label: str, fn: object,
+    ) -> tuple[str, str, str]:
         log.info(f"{label}...")
         try:
-            sections[key] = fn()
-            log.info(f"  OK {label} ({len(sections[key])}ch)")
+            result = fn()
+            log.info(f"  OK {label} ({len(result)}ch)")
+            return key, label, result
         except Exception as e:
             log.error(f"  FAIL {label}: {e}", exc_info=True)
-            sections[key] = ""
-        time.sleep(DELAY)
+            return key, label, ""
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {
+            pool.submit(_run_stream, k, lbl, fn): k
+            for k, lbl, fn in streams
+        }
+        for future in as_completed(futures):
+            key, label, result = future.result()
+            sections[key] = result
 
     subj, html = build_email(sections)
     log.info(f"Subject: {subj}")

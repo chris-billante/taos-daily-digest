@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -25,7 +26,6 @@ DATA = ROOT / "data"
 CACHE_FILE = DATA / "research_cache.json"
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-DELAY = int(os.environ.get("RESEARCH_DELAY", "10"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -237,17 +237,26 @@ def main() -> None:
         ("agents", "Land agents", research_agents),
     ]
 
-    for key, label, fn in queries:
+    def _run_query(
+        key: str, label: str, fn: object,
+    ) -> tuple[str, str, str]:
         log.info("Researching: %s", label)
         try:
             result = fn()
-            cache["sections"][key] = result
-            chars = len(result)
-            log.info("  %s: %d chars", label, chars)
+            log.info("  %s: %d chars", label, len(result))
+            return key, label, result
         except Exception as e:
             log.error("  %s FAILED: %s", label, e, exc_info=True)
-            cache["sections"][key] = ""
-        time.sleep(DELAY)
+            return key, label, ""
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {
+            pool.submit(_run_query, key, label, fn): key
+            for key, label, fn in queries
+        }
+        for future in as_completed(futures):
+            key, label, result = future.result()
+            cache["sections"][key] = result
 
     # Write cache
     with open(CACHE_FILE, "w", encoding="utf-8") as f:

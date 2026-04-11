@@ -9,6 +9,7 @@ import json
 import re
 import hashlib
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -102,7 +103,9 @@ def _is_long_bed(title: str) -> bool:
 # Scrapers
 # ---------------------------------------------------------------------------
 
-def _scrape_cargurus(max_price: int, max_miles: int, min_year: int, max_year: int) -> list:
+def _scrape_cargurus(max_price: int, max_miles: int, min_year: int, max_year: int,
+                     session: requests.Session | None = None) -> list:
+    session = session or requests.Session()
     listings = []
     search_urls = [
         (f"https://www.cargurus.com/Cars/inventorylisting/viewDetailsFilterViewInventoryListing.action"
@@ -120,7 +123,7 @@ def _scrape_cargurus(max_price: int, max_miles: int, min_year: int, max_year: in
     ]
     for url in search_urls:
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
+            resp = session.get(url, timeout=10)
             resp.raise_for_status()
             page = resp.text
 
@@ -173,7 +176,9 @@ def _scrape_cargurus(max_price: int, max_miles: int, min_year: int, max_year: in
     return listings
 
 
-def _scrape_carscom(max_price: int, max_miles: int, min_year: int, max_year: int) -> list:
+def _scrape_carscom(max_price: int, max_miles: int, min_year: int, max_year: int,
+                    session: requests.Session | None = None) -> list:
+    session = session or requests.Session()
     listings = []
     trim_slugs = [
         ("toyota-tacoma-trd_off_road", "long+bed"),
@@ -189,7 +194,7 @@ def _scrape_carscom(max_price: int, max_miles: int, min_year: int, max_year: int
             f"&trims[]={trim_slug}&year_max={max_year}&year_min={min_year}"
         )
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
+            resp = session.get(url, timeout=10)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -311,11 +316,22 @@ def run_tacoma_search(data_dir: Path) -> tuple:
 
     cache = _load_cache(data_dir)
 
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
     raw = []
-    log.info("Scraping CarGurus...")
-    raw.extend(_scrape_cargurus(max_price, max_miles, min_year, max_year))
-    log.info("Scraping Cars.com...")
-    raw.extend(_scrape_carscom(max_price, max_miles, min_year, max_year))
+    log.info("Scraping CarGurus + Cars.com concurrently...")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        cg_future = pool.submit(
+            _scrape_cargurus, max_price, max_miles,
+            min_year, max_year, session,
+        )
+        cc_future = pool.submit(
+            _scrape_carscom, max_price, max_miles,
+            min_year, max_year, session,
+        )
+        raw.extend(cg_future.result())
+        raw.extend(cc_future.result())
     log.info(f"Raw: {len(raw)} listings")
 
     filtered = _filter_listings(raw, max_price, max_miles)
