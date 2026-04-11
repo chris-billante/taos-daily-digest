@@ -25,7 +25,7 @@ DATA = ROOT / "data"
 CACHE_FILE = DATA / "research_cache.json"
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-DELAY = int(os.environ.get("RESEARCH_DELAY", "15"))
+DELAY = int(os.environ.get("RESEARCH_DELAY", "10"))
 
 logging.basicConfig(
     level=logging.INFO,
