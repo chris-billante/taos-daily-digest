@@ -3,135 +3,59 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Taos Build Intel — Task Feedback</title>
+  <title>Taos Build Intel — Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f0f4f8;
       min-height: 100vh;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 24px 16px;
+      padding: 0;
     }
-    .card {
+    .top-bar {
+      background: linear-gradient(135deg, #1B3A5C, #2D6A4F);
+      color: #fff;
+      padding: 16px 20px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-bar .logo { font-size: 18px; font-weight: 700; }
+    .top-bar .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+    .container {
+      max-width: 540px;
+      margin: 0 auto;
+      padding: 12px 16px 80px;
+    }
+
+    /* --- Feedback form card --- */
+    .form-card {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-      max-width: 480px;
-      width: 100%;
       overflow: hidden;
+      margin-bottom: 16px;
     }
-    .header {
-      background: linear-gradient(135deg, #1B3A5C, #2D6A4F);
+    .form-header {
+      background: linear-gradient(135deg, #1e40af, #2563eb);
       color: #fff;
-      padding: 20px 22px 16px;
+      padding: 16px 18px 12px;
     }
-    .header .logo { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
-    .header .sub { font-size: 12px; opacity: 0.75; }
-    .body { padding: 22px; }
-    .label {
-      font-size: 12px;
+    .form-header .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.8; }
+    .form-header .task-title { font-size: 15px; font-weight: 600; margin-top: 4px; line-height: 1.4; }
+    .form-body { padding: 18px; }
+    .field-label {
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: #64748b;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
-    .task-box {
-      background: #f1f5f9;
-      border-left: 3px solid #2563EB;
-      border-radius: 6px;
-      padding: 12px 14px;
-      font-size: 14px;
-      color: #1e293b;
-      line-height: 1.45;
-      margin-bottom: 20px;
-    }
-    .task-box.generic { border-color: #94a3b8; color: #475569; font-style: italic; }
-    textarea {
-      width: 100%;
-      border: 1.5px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 15px;
-      font-family: inherit;
-      line-height: 1.5;
-      color: #1e293b;
-      resize: vertical;
-      min-height: 100px;
-      transition: border-color 0.15s;
-      margin-bottom: 14px;
-    }
-    textarea:focus { outline: 2px solid #2563EB; outline-offset: 2px; border-color: #2563EB; }
-    textarea::placeholder { color: #94a3b8; }
-    .btn {
-      display: block;
-      width: 100%;
-      background: #16a34a;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 15px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.15s;
-      min-height: 52px;
-    }
-    .btn:hover { background: #15803d; }
-    .btn:active { background: #166534; }
-    .btn:focus { outline: 2px solid #15803d; outline-offset: 2px; }
-    .btn:disabled { background: #86efac; cursor: not-allowed; }
-    .error-msg {
-      color: #dc2626;
-      background: #FEE2E2;
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 13px;
-      margin-top: 10px;
-      display: none;
-    }
-    .spinner {
-      display: inline-block; width: 14px; height: 14px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-      vertical-align: middle; margin-right: 6px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .success {
-      text-align: center;
-      padding: 32px 22px;
-    }
-    .success .check { font-size: 56px; margin-bottom: 12px; }
-    .success h2 { font-size: 20px; color: #1e293b; margin-bottom: 8px; }
-    .success p { font-size: 14px; color: #64748b; line-height: 1.5; }
-    .date-chip {
-      display: inline-block;
-      background: #eff6ff;
-      color: #2563EB;
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: 20px;
-      padding: 3px 10px;
-      margin-bottom: 12px;
-    }
-    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 18px 0; }
-    .char-counter {
-      font-size: 11px;
-      text-align: right;
-      margin-top: -10px;
-      margin-bottom: 14px;
-      color: #94a3b8;
-    }
-    .char-counter.amber { color: #d97706; }
-    .char-counter.red { color: #dc2626; font-weight: 600; }
+    .field-label:not(:first-child) { margin-top: 14px; }
     .status-group {
       display: flex;
       gap: 6px;
-      margin-bottom: 16px;
       flex-wrap: wrap;
     }
     .status-btn {
@@ -153,51 +77,426 @@
     .status-btn.active-in_progress { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
     .status-btn.active-waiting    { background: #fef3c7; border-color: #d97706; color: #92400e; }
     .status-btn.active-blocked    { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+    textarea {
+      width: 100%;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.5;
+      color: #1e293b;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.15s;
+      margin-top: 4px;
+    }
+    textarea:focus { outline: 2px solid #2563EB; outline-offset: 2px; border-color: #2563EB; }
+    textarea::placeholder { color: #94a3b8; }
+    .char-counter {
+      font-size: 11px;
+      text-align: right;
+      margin-top: 2px;
+      color: #94a3b8;
+    }
+    .char-counter.amber { color: #d97706; }
+    .char-counter.red { color: #dc2626; font-weight: 600; }
+    .btn-submit {
+      display: block;
+      width: 100%;
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 16px;
+      min-height: 48px;
+    }
+    .btn-submit:hover { background: #15803d; }
+    .btn-submit:disabled { background: #86efac; cursor: not-allowed; }
+    .error-msg {
+      color: #dc2626;
+      background: #FEE2E2;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 10px;
+      display: none;
+    }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    .success-banner {
+      background: #F0FDF4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      text-align: center;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .success-banner .check { font-size: 20px; margin-right: 6px; vertical-align: middle; }
+    .success-banner .text { font-size: 14px; color: #166534; font-weight: 600; }
+    .success-banner .meta { font-size: 12px; color: #16a34a; margin-top: 4px; }
+
+    /* --- Journal section --- */
+    .section-header {
+      font-size: 13px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 8px 0 6px;
+      border-bottom: 2px solid #1B3A5C;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .summary-strip {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .summary-strip .num { color: #1B3A5C; }
+    .filters {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .filter-btn {
+      flex: 1;
+      padding: 7px 4px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      color: #64748b;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { border-color: #94a3b8; }
+    .filter-btn.active { background: #1B3A5C; color: #fff; border-color: #1B3A5C; }
+
+    /* Date dividers */
+    .date-divider {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 0 4px;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 6px;
+    }
+
+    /* Cards */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: box-shadow 0.15s;
+    }
+    .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card-header {
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .card-body {
+      display: none;
+      padding: 0 12px 12px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .card.expanded .card-body { display: block; }
+
+    /* Status chips */
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .chip-done       { background: #dcfce7; color: #15803d; }
+    .chip-in_progress { background: #dbeafe; color: #1d4ed8; }
+    .chip-waiting    { background: #fef3c7; color: #92400e; }
+    .chip-blocked    { background: #fee2e2; color: #991b1b; }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+      line-height: 1.4;
+      flex: 1;
+    }
+    .card-preview {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+    .card-chevron {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-top: 2px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .card.expanded .card-chevron { transform: rotate(90deg); }
+
+    /* Card body content */
+    .card-field-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 8px 0 3px;
+    }
+    .card-field-label:first-child { margin-top: 6px; }
+    .field-value {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .field-value .empty { color: #94a3b8; font-style: italic; }
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .action-btn {
+      padding: 6px 12px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #475569;
+      transition: all 0.15s;
+    }
+    .action-btn:hover { border-color: #2563eb; color: #2563eb; }
+    .action-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .action-btn.primary:hover { background: #1d4ed8; }
+
+    /* Edit mode */
+    .edit-textarea {
+      width: 100%;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.5;
+      color: #1e293b;
+      resize: vertical;
+      min-height: 60px;
+    }
+    .edit-textarea:focus { outline: 2px solid #2563EB; outline-offset: 1px; border-color: #2563EB; }
+    .edit-status-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .edit-status-btn {
+      padding: 4px 10px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 5px;
+      background: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #64748b;
+    }
+    .edit-status-btn.sel { font-weight: 700; }
+    .edit-status-btn.sel-done       { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+    .edit-status-btn.sel-in_progress { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
+    .edit-status-btn.sel-waiting    { background: #fef3c7; border-color: #d97706; color: #92400e; }
+    .edit-status-btn.sel-blocked    { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+
+    /* FAB */
+    .fab {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      font-size: 24px;
+      font-weight: 400;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 90;
+    }
+    .fab:hover { background: #15803d; }
+
+    /* Loading / empty states */
+    .loading, .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: #64748b;
+    }
+    .loading .spinner-lg {
+      display: inline-block; width: 24px; height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-state p { font-size: 13px; margin-top: 6px; }
+
+    /* New entry modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 12px 12px 0 0;
+      width: 100%;
+      max-width: 540px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 20px;
+      animation: slideUp 0.2s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal h3 { font-size: 16px; color: #1e293b; margin-bottom: 14px; }
+    .modal .field-label { margin-top: 12px; }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .synced-label { font-size: 11px; color: #94a3b8; }
   </style>
 </head>
 <body>
-<div class="card">
-  <div class="header">
-    <div class="logo">🏔️ Taos Build Intel</div>
-    <div class="sub">Task Feedback</div>
+<div class="top-bar">
+  <div class="logo">Taos Build Intel</div>
+  <div class="sub">Dashboard</div>
+</div>
+
+<div class="container">
+
+  <!-- Success banner (shown after form submit) -->
+  <div class="success-banner" id="success-banner">
+    <span class="check">&#10003;</span>
+    <span class="text" id="success-text">Saved!</span>
+    <div class="meta" id="success-meta"></div>
   </div>
 
-  <div id="form-view" class="body">
-    <div id="date-chip" class="date-chip" style="display:none"></div>
-
-    <div class="label">Today's Task</div>
-    <div id="task-box" class="task-box generic">Loading task…</div>
-
-    <div class="label">Status</div>
-    <div class="status-group" id="status-group">
-      <button type="button" class="status-btn active-done" data-status="done" onclick="setStatus('done')">Done</button>
-      <button type="button" class="status-btn" data-status="in_progress" onclick="setStatus('in_progress')">In Progress</button>
-      <button type="button" class="status-btn" data-status="waiting" onclick="setStatus('waiting')">Waiting</button>
-      <button type="button" class="status-btn" data-status="blocked" onclick="setStatus('blocked')">Blocked</button>
+  <!-- Feedback form card (shown when arriving from email with task param) -->
+  <div class="form-card" id="form-card" style="display:none">
+    <div class="form-header">
+      <div class="label">Today's Task</div>
+      <div class="task-title" id="form-task-title">Loading...</div>
     </div>
+    <div class="form-body" id="form-body">
+      <div class="field-label">Status</div>
+      <div class="status-group" id="form-status-group">
+        <button type="button" class="status-btn active-done" data-status="done" onclick="setFormStatus('done')">Done</button>
+        <button type="button" class="status-btn" data-status="in_progress" onclick="setFormStatus('in_progress')">In Progress</button>
+        <button type="button" class="status-btn" data-status="waiting" onclick="setFormStatus('waiting')">Waiting</button>
+        <button type="button" class="status-btn" data-status="blocked" onclick="setFormStatus('blocked')">Blocked</button>
+      </div>
 
+      <div class="field-label">Notes <span style="font-weight:400;text-transform:none;font-size:11px;color:#94a3b8">(optional)</span></div>
+      <textarea id="form-notes" placeholder="Pricing, lead times, next steps..." rows="3" maxlength="500"></textarea>
+      <div class="char-counter" id="notes-counter">0 / 500</div>
 
-    <div class="label">What did you find out? <span style="font-weight:400;text-transform:none;font-size:12px;color:#94a3b8">(optional but helpful)</span></div>
-    <textarea id="notes" placeholder="Pricing, lead times, next steps…" rows="4" maxlength="500"></textarea>
-    <div class="char-counter" id="notes-counter">0 / 500</div>
+      <div class="field-label">Next step or follow-up?</div>
+      <textarea id="form-followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote." rows="2" style="min-height:56px" maxlength="200"></textarea>
+      <div class="char-counter" id="followup-counter">0 / 200</div>
 
-    <div class="label">Next step or follow-up?</div>
-    <textarea id="followup" placeholder="e.g. Call back Thursday. Ask for Heritage model quote in writing." rows="2" style="min-height:64px" maxlength="200"></textarea>
-    <div class="char-counter" id="followup-counter">0 / 200</div>
-
-    <button class="btn" id="submit-btn" onclick="submitFeedback()">Mark Done & Save Notes</button>
-    <div class="error-msg" id="error-msg">Something went wrong. Please try again or email Chris directly.</div>
+      <button class="btn-submit" id="submit-btn" onclick="submitFeedback()">Save Progress & Notes</button>
+      <div class="error-msg" id="error-msg"></div>
+    </div>
   </div>
 
-  <div id="success-view" class="success" style="display:none">
-    <div class="check">✅</div>
-    <h2>Logged!</h2>
-    <p><strong id="success-task"></strong></p>
-    <p>Your notes are saved. They'll show up in tomorrow's digest.</p>
-    <p id="saved-time" style="font-size:12px;color:#16a34a;margin-top:6px"></p>
-    <hr class="divider">
-    <p style="font-size:12px;color:#94a3b8">You can close this tab or
-      <a href="journal/" style="color:#2563EB;text-decoration:underline">view your journal</a>.</p>
+  <!-- Journal section (always visible) -->
+  <div class="section-header">
+    <span>My Journal</span>
+    <div class="summary-strip">
+      <span><span class="num" id="total-count">-</span> total</span>
+      <span><span class="num" id="done-count">-</span> done</span>
+      <span><span class="num" id="active-count">-</span> active</span>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+    <button class="filter-btn" data-filter="active" onclick="setFilter('active')">In Progress</button>
+    <button class="filter-btn" data-filter="done" onclick="setFilter('done')">Done</button>
+  </div>
+
+  <div id="entries-container">
+    <div class="loading"><div class="spinner-lg"></div><div>Loading...</div></div>
+  </div>
+
+  <div class="synced-label" id="synced-at" style="text-align:center;margin-top:8px"></div>
+</div>
+
+<button class="fab" id="fab-add" onclick="openNewEntry()" title="Add entry">+</button>
+
+<!-- New entry modal -->
+<div class="modal-overlay" id="new-entry-modal">
+  <div class="modal">
+    <h3>New Entry</h3>
+    <div class="field-label">Task</div>
+    <textarea class="edit-textarea" id="new-task" rows="2" placeholder="What are you working on?"></textarea>
+    <div class="field-label">Status</div>
+    <div class="edit-status-group" id="new-status-group">
+      <button type="button" class="edit-status-btn sel sel-done" data-status="done" onclick="setNewStatus('done')">Done</button>
+      <button type="button" class="edit-status-btn" data-status="in_progress" onclick="setNewStatus('in_progress')">In Progress</button>
+      <button type="button" class="edit-status-btn" data-status="waiting" onclick="setNewStatus('waiting')">Waiting</button>
+      <button type="button" class="edit-status-btn" data-status="blocked" onclick="setNewStatus('blocked')">Blocked</button>
+    </div>
+    <div class="field-label">Notes</div>
+    <textarea class="edit-textarea" id="new-notes" rows="3" placeholder="Details, pricing, contacts..." maxlength="500"></textarea>
+    <div class="field-label">Follow-up</div>
+    <textarea class="edit-textarea" id="new-followup" rows="2" placeholder="Next step..." maxlength="200"></textarea>
+    <div class="modal-actions">
+      <button class="action-btn" onclick="closeNewEntry()">Cancel</button>
+      <button class="action-btn primary" id="new-save-btn" onclick="saveNewEntry()">Save</button>
+    </div>
   </div>
 </div>
 
@@ -207,15 +506,18 @@ const REPO_OWNER   = 'chris-billante';
 const FEEDBACK_REPO = 'taos-feedback-private';
 const DIGEST_REPO   = 'taos-daily-digest';
 const DRAFT_KEY    = 'taos-feedback-draft';
+const CACHE_KEY    = 'taos-journal-cache';
+const CACHE_TTL    = 5 * 60 * 1000;
 
 function getParam(name) {
   return new URLSearchParams(window.location.search).get(name) || '';
 }
 
-// --- Character counters ---
+// ===== Character counters =====
 function setupCounter(textareaId, counterId, max) {
   const ta = document.getElementById(textareaId);
   const counter = document.getElementById(counterId);
+  if (!ta || !counter) return;
   function update() {
     const len = ta.value.length;
     counter.textContent = `${len} / ${max}`;
@@ -226,11 +528,11 @@ function setupCounter(textareaId, counterId, max) {
   update();
 }
 
-// --- localStorage draft persistence ---
+// ===== Draft persistence =====
 function saveDraft() {
   const draft = {
-    notes: document.getElementById('notes').value,
-    followup: document.getElementById('followup').value,
+    notes: document.getElementById('form-notes').value,
+    followup: document.getElementById('form-followup').value,
     date: getParam('date'),
     ts: Date.now()
   };
@@ -242,12 +544,10 @@ function restoreDraft() {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     const draft = JSON.parse(raw);
-    // Only restore if same day or less than 24h old
-    const age = Date.now() - (draft.ts || 0);
-    if (age > 86400000) { localStorage.removeItem(DRAFT_KEY); return; }
+    if (Date.now() - (draft.ts || 0) > 86400000) { localStorage.removeItem(DRAFT_KEY); return; }
     if (draft.date && getParam('date') && draft.date !== getParam('date')) return;
-    if (draft.notes) document.getElementById('notes').value = draft.notes;
-    if (draft.followup) document.getElementById('followup').value = draft.followup;
+    if (draft.notes) document.getElementById('form-notes').value = draft.notes;
+    if (draft.followup) document.getElementById('form-followup').value = draft.followup;
   } catch(e) {}
 }
 
@@ -255,67 +555,26 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch(e) {}
 }
 
-let currentStatus = 'done';
+// ===== Form status =====
+let formStatus = 'done';
 
-function setStatus(status) {
-  currentStatus = status;
-  document.querySelectorAll('.status-btn').forEach(btn => {
+function setFormStatus(status) {
+  formStatus = status;
+  document.querySelectorAll('#form-status-group .status-btn').forEach(btn => {
     const s = btn.dataset.status;
     btn.className = 'status-btn' + (s === status ? ` active-${s}` : '');
   });
-  // Update submit button text based on status
   const submitBtn = document.getElementById('submit-btn');
   if (!submitBtn.disabled) {
-    const labels = { done: 'Mark Done & Save Notes', in_progress: 'Save Progress', waiting: 'Save & Mark Waiting', blocked: 'Save & Mark Blocked' };
-    submitBtn.textContent = labels[status] || 'Save Notes';
+    const labels = { done: 'Save Progress & Notes', in_progress: 'Save Progress & Notes', waiting: 'Save & Mark Waiting', blocked: 'Save & Mark Blocked' };
+    submitBtn.textContent = labels[status] || 'Save Progress & Notes';
   }
 }
 
-function init() {
-  const date  = getParam('date');
-  const task  = getParam('task');
-  const issue = getParam('issue');
-  if (date) {
-    const chip = document.getElementById('date-chip');
-    chip.textContent = formatDate(date);
-    chip.style.display = 'inline-block';
-  }
-
-  const box = document.getElementById('task-box');
-  if (task) {
-    box.textContent = decodeURIComponent(task);
-    box.classList.remove('generic');
-  } else if (!issue) {
-    box.textContent = 'No specific task linked — describe what you worked on below.';
-  } else {
-    fetchTaskFromIssue(issue).then(t => {
-      if (t) { box.textContent = t; box.classList.remove('generic'); }
-      else    { box.textContent = 'Task from today\'s digest.'; box.classList.remove('generic'); }
-    });
-  }
-
-  setupCounter('notes', 'notes-counter', 500);
-  setupCounter('followup', 'followup-counter', 200);
-  restoreDraft();
-  // Re-run counters after restore
-  document.getElementById('notes').dispatchEvent(new Event('input'));
-  document.getElementById('followup').dispatchEvent(new Event('input'));
-  // Auto-save drafts on input
-  document.getElementById('notes').addEventListener('input', saveDraft);
-  document.getElementById('followup').addEventListener('input', saveDraft);
-}
-
-function formatDate(iso) {
-  try {
-    const d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
-  } catch(e) { return iso; }
-}
-
+// ===== Fetch task from tracking issue =====
 async function fetchTaskFromIssue(issueNum) {
   if (!issueNum || FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') return null;
   try {
-    // Tracking issues live in the digest repo, not the feedback repo
     const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DIGEST_REPO}/issues/${issueNum}`, {
       headers: { 'Authorization': `token ${FEEDBACK_PAT}`, 'Accept': 'application/vnd.github.v3+json' }
     });
@@ -326,6 +585,7 @@ async function fetchTaskFromIssue(issueNum) {
   } catch(e) { return null; }
 }
 
+// ===== Submit feedback =====
 async function postWithRetry(url, options) {
   const r = await fetch(url, options);
   if (r.status >= 500) {
@@ -339,18 +599,18 @@ async function submitFeedback() {
   const date     = getParam('date') || new Date().toISOString().slice(0,10);
   const task     = getParam('task') || '';
   const issue    = getParam('issue') || '';
-  const notes    = document.getElementById('notes').value.trim();
-  const followup = document.getElementById('followup').value.trim();
+  const notes    = document.getElementById('form-notes').value.trim();
+  const followup = document.getElementById('form-followup').value.trim();
   const btn      = document.getElementById('submit-btn');
   const errEl    = document.getElementById('error-msg');
 
   btn.disabled  = true;
-  btn.innerHTML = '<span class="spinner"></span> Saving…';
+  btn.innerHTML = '<span class="spinner"></span> Saving...';
   errEl.style.display = 'none';
 
   const payload = {
-    completed: currentStatus === 'done',
-    status: currentStatus,
+    completed: formStatus === 'done',
+    status: formStatus,
     task_summary: decodeURIComponent(task) || 'Task from digest',
     notes: notes.slice(0, 500),
     follow_up: followup.slice(0, 200),
@@ -360,14 +620,13 @@ async function submitFeedback() {
 
   const taskShort = payload.task_summary.slice(0, 50);
   const crossRef = issue ? `\n\nTracking issue: ${REPO_OWNER}/${DIGEST_REPO}#${issue}` : '';
-  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}${crossRef}\n\n---\n*Submitted via Taos Build Intel feedback form*`;
+  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}${crossRef}\n\n---\n*Submitted via Taos Build Intel dashboard*`;
 
   if (FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
-    showSuccess();
+    showFormSuccess(payload);
     return;
   }
 
-  // Always create issues in the feedback repo (never comment on cross-repo issues)
   const url  = `https://api.github.com/repos/${REPO_OWNER}/${FEEDBACK_REPO}/issues`;
   const body = JSON.stringify({
     title: `Feedback: ${date} — ${taskShort}`,
@@ -388,38 +647,443 @@ async function submitFeedback() {
 
     if (r.ok) {
       clearDraft();
-      showSuccess();
+      showFormSuccess(payload);
+      // Add to journal entries optimistically
+      payload.task_id = buildTaskId(payload.date, payload.task_summary);
+      allEntries.unshift(payload);
+      try { sessionStorage.removeItem(CACHE_KEY); } catch(e) {}
+      renderEntries(allEntries);
+      updateSummary(allEntries);
     } else {
-      console.error('GitHub API error:', r.status);
       if (r.status === 401 || r.status === 403) {
         errEl.textContent = 'Permission error — please let Chris know.';
       } else if (r.status >= 500) {
-        errEl.textContent = 'GitHub is having issues. Retry failed — try again later.';
+        errEl.textContent = 'GitHub is having issues. Try again later.';
       } else {
         errEl.textContent = 'Could not save. Please try again or text Chris.';
       }
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.innerHTML = '✅ Mark Done & Save Notes';
+      btn.textContent = 'Save Progress & Notes';
     }
   } catch(e) {
-    console.error('Network error:', e);
     errEl.textContent = 'Network error. Please check your connection and try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.innerHTML = '✅ Mark Done & Save Notes';
+    btn.textContent = 'Save Progress & Notes';
   }
 }
 
-function showSuccess() {
-  const task = getParam('task');
-  const taskText = task ? decodeURIComponent(task) : 'your task';
-  document.getElementById('success-task').textContent = taskText;
-  const now = new Date();
-  document.getElementById('saved-time').textContent =
-    `Saved at ${now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}`;
-  document.getElementById('form-view').style.display = 'none';
-  document.getElementById('success-view').style.display = 'block';
+function showFormSuccess(payload) {
+  document.getElementById('form-card').style.display = 'none';
+  const banner = document.getElementById('success-banner');
+  banner.style.display = 'block';
+  document.getElementById('success-text').textContent =
+    `Saved: ${payload.task_summary.slice(0, 60)}`;
+  document.getElementById('success-meta').textContent =
+    `${new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}`;
+}
+
+// ===== GitHub API helpers (journal) =====
+async function ghGet(path, repo) {
+  repo = repo || FEEDBACK_REPO;
+  const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${repo}/${path}`, {
+    headers: { 'Authorization': `token ${FEEDBACK_PAT}`, 'Accept': 'application/vnd.github.v3+json' }
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function ghPost(path, data) {
+  const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${FEEDBACK_REPO}/${path}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${FEEDBACK_PAT}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  return r;
+}
+
+// ===== Journal data =====
+let allEntries = [];
+let currentFilter = 'all';
+let newEntryStatus = 'done';
+
+function parseCompletionData(body) {
+  const match = body.match(/COMPLETION_DATA:(\{.+?\})/s);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch(e) { return null; }
+}
+
+function buildTaskId(date, summary) {
+  const slug = (summary || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40).replace(/-$/, '');
+  return `action-${date}-${slug}`;
+}
+
+async function fetchEntries() {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { data, ts } = JSON.parse(cached);
+      if (Date.now() - ts < CACHE_TTL) return data;
+    }
+  } catch(e) {}
+
+  const issues = await ghGet('issues?labels=daily-digest,tracking&state=all&per_page=30&sort=created&direction=desc');
+  if (!issues || !Array.isArray(issues)) return [];
+
+  const entriesById = {};
+
+  for (const issue of issues) {
+    const bodyData = parseCompletionData(issue.body || '');
+    if (bodyData && bodyData.date) {
+      const taskId = buildTaskId(bodyData.date, bodyData.task_summary);
+      bodyData.task_id = taskId;
+      bodyData.source_issue = issue.number;
+      if (!bodyData.status) bodyData.status = bodyData.completed !== false ? 'done' : 'in_progress';
+      if (!entriesById[taskId] || (bodyData.timestamp || '') > (entriesById[taskId].timestamp || '')) {
+        entriesById[taskId] = bodyData;
+      }
+    }
+
+    if (issue.comments > 0) {
+      const comments = await ghGet(`issues/${issue.number}/comments?per_page=50`);
+      if (comments && Array.isArray(comments)) {
+        for (const c of comments) {
+          const data = parseCompletionData(c.body || '');
+          if (!data || !data.date) continue;
+          const taskId = data.edit_of || buildTaskId(data.date, data.task_summary);
+          data.task_id = taskId;
+          data.source_issue = issue.number;
+          if (!data.status) data.status = data.completed !== false ? 'done' : 'in_progress';
+          if (!entriesById[taskId] || (data.timestamp || '') > (entriesById[taskId].timestamp || '')) {
+            entriesById[taskId] = data;
+          }
+        }
+      }
+    }
+  }
+
+  const entries = Object.values(entriesById);
+  entries.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+  try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: entries, ts: Date.now() })); } catch(e) {}
+  return entries;
+}
+
+// ===== Journal rendering =====
+function statusChip(status) {
+  const map = {
+    done:        ['Done',        'chip-done'],
+    in_progress: ['In Progress', 'chip-in_progress'],
+    waiting:     ['Waiting',     'chip-waiting'],
+    blocked:     ['Blocked',     'chip-blocked'],
+  };
+  const [label, cls] = map[status] || map.done;
+  return `<span class="chip ${cls}">${label}</span>`;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function renderEntries(entries) {
+  const container = document.getElementById('entries-container');
+  const filtered = entries.filter(e => {
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'done') return e.status === 'done';
+    return e.status !== 'done';
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No entries yet.</p><p>Submit feedback from your daily digest to get started.</p></div>';
+    return;
+  }
+
+  let html = '';
+  let currentDate = '';
+
+  for (let i = 0; i < filtered.length; i++) {
+    const e = filtered[i];
+    const date = e.date || 'Unknown';
+    if (date !== currentDate) {
+      currentDate = date;
+      let dateLabel;
+      try {
+        const d = new Date(date + 'T12:00:00');
+        dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      } catch(err) { dateLabel = date; }
+      html += `<div class="date-divider">${dateLabel}</div>`;
+    }
+
+    const preview = e.notes ? escHtml(e.notes.slice(0, 80)) + (e.notes.length > 80 ? '...' : '') : '';
+    const notesDisplay = e.notes ? escHtml(e.notes) : '<span class="empty">No notes</span>';
+    const followUpDisplay = e.follow_up ? escHtml(e.follow_up) : '<span class="empty">None</span>';
+
+    html += `
+    <div class="card" id="card-${i}" data-idx="${i}">
+      <div class="card-header" onclick="toggleCard(${i})">
+        ${statusChip(e.status)}
+        <div style="flex:1">
+          <div class="card-title">${escHtml(e.task_summary || 'Task')}</div>
+          ${preview ? `<div class="card-preview">${preview}</div>` : ''}
+        </div>
+        <span class="card-chevron">&#x203A;</span>
+      </div>
+      <div class="card-body" id="body-${i}">
+        <div class="card-field-label">Notes</div>
+        <div class="field-value" id="notes-${i}">${notesDisplay}</div>
+        <div class="card-field-label">Follow-up</div>
+        <div class="field-value" id="followup-${i}">${followUpDisplay}</div>
+        <div class="card-actions">
+          <button class="action-btn" onclick="startEdit(${i})">Edit</button>
+          <button class="action-btn" onclick="cycleStatus(${i})">Change Status</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function updateSummary(entries) {
+  const total = entries.length;
+  const done = entries.filter(e => e.status === 'done').length;
+  document.getElementById('total-count').textContent = total;
+  document.getElementById('done-count').textContent = done;
+  document.getElementById('active-count').textContent = total - done;
+  document.getElementById('synced-at').textContent =
+    `Last synced: ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
+
+// ===== Journal interactions =====
+function toggleCard(idx) {
+  document.getElementById(`card-${idx}`).classList.toggle('expanded');
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filter);
+  });
+  renderEntries(allEntries);
+}
+
+async function cycleStatus(idx) {
+  const entry = getFilteredEntry(idx);
+  if (!entry) return;
+  const order = ['done', 'in_progress', 'waiting', 'blocked'];
+  const current = order.indexOf(entry.status);
+  const next = order[(current + 1) % order.length];
+  await saveEdit(entry, { status: next });
+}
+
+function getFilteredEntry(idx) {
+  const filtered = allEntries.filter(e => {
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'done') return e.status === 'done';
+    return e.status !== 'done';
+  });
+  return filtered[idx];
+}
+
+function startEdit(idx) {
+  const entry = getFilteredEntry(idx);
+  if (!entry) return;
+  const bodyEl = document.getElementById(`body-${idx}`);
+
+  const statusBtns = ['done', 'in_progress', 'waiting', 'blocked'].map(s => {
+    const labels = { done: 'Done', in_progress: 'In Progress', waiting: 'Waiting', blocked: 'Blocked' };
+    const sel = s === entry.status ? ` sel sel-${s}` : '';
+    return `<button type="button" class="edit-status-btn${sel}" data-status="${s}" onclick="editSetStatus(${idx},'${s}')">${labels[s]}</button>`;
+  }).join('');
+
+  bodyEl.innerHTML = `
+    <div class="card-field-label">Status</div>
+    <div class="edit-status-group" id="edit-status-${idx}">${statusBtns}</div>
+    <div class="card-field-label">Notes</div>
+    <textarea class="edit-textarea" id="edit-notes-${idx}" rows="3" maxlength="500">${escHtml(entry.notes || '')}</textarea>
+    <div class="card-field-label">Follow-up</div>
+    <textarea class="edit-textarea" id="edit-followup-${idx}" rows="2" maxlength="200">${escHtml(entry.follow_up || '')}</textarea>
+    <div class="card-actions">
+      <button class="action-btn" onclick="cancelEdit(${idx})">Cancel</button>
+      <button class="action-btn primary" onclick="commitEdit(${idx})">Save</button>
+    </div>`;
+
+  document.getElementById(`card-${idx}`).dataset.editStatus = entry.status;
+}
+
+function editSetStatus(idx, status) {
+  document.getElementById(`card-${idx}`).dataset.editStatus = status;
+  document.querySelectorAll(`#edit-status-${idx} .edit-status-btn`).forEach(btn => {
+    const s = btn.dataset.status;
+    btn.className = 'edit-status-btn' + (s === status ? ` sel sel-${s}` : '');
+  });
+}
+
+function cancelEdit(idx) {
+  renderEntries(allEntries);
+  const card = document.getElementById(`card-${idx}`);
+  if (card) card.classList.add('expanded');
+}
+
+async function commitEdit(idx) {
+  const entry = getFilteredEntry(idx);
+  if (!entry) return;
+  const newStatus = document.getElementById(`card-${idx}`).dataset.editStatus || entry.status;
+  const newNotes = document.getElementById(`edit-notes-${idx}`).value.trim();
+  const newFollowUp = document.getElementById(`edit-followup-${idx}`).value.trim();
+  await saveEdit(entry, { status: newStatus, notes: newNotes, follow_up: newFollowUp });
+}
+
+async function saveEdit(entry, updates) {
+  const payload = {
+    completed: (updates.status || entry.status) === 'done',
+    status: updates.status || entry.status,
+    task_summary: entry.task_summary,
+    notes: updates.notes !== undefined ? updates.notes.slice(0, 500) : (entry.notes || ''),
+    follow_up: updates.follow_up !== undefined ? updates.follow_up.slice(0, 200) : (entry.follow_up || ''),
+    date: entry.date,
+    timestamp: new Date().toISOString(),
+    edit_of: entry.task_id,
+    version: (entry.version || 1) + 1
+  };
+
+  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}\n\n---\n*Updated via Taos Build Intel dashboard*`;
+  const taskShort = payload.task_summary.slice(0, 50);
+
+  const r = await ghPost('issues', {
+    title: `Feedback: ${payload.date} — ${taskShort}`,
+    body: commentBody,
+    labels: ['daily-digest', 'tracking']
+  });
+
+  if (r && r.ok) {
+    Object.assign(entry, payload);
+    entry.task_id = entry.edit_of || entry.task_id;
+    try { sessionStorage.removeItem(CACHE_KEY); } catch(e) {}
+    renderEntries(allEntries);
+    updateSummary(allEntries);
+  } else {
+    alert('Could not save. Please try again.');
+  }
+}
+
+// ===== New entry modal =====
+function openNewEntry() {
+  document.getElementById('new-entry-modal').classList.add('open');
+  document.getElementById('new-task').focus();
+}
+
+function closeNewEntry() {
+  document.getElementById('new-entry-modal').classList.remove('open');
+  document.getElementById('new-task').value = '';
+  document.getElementById('new-notes').value = '';
+  document.getElementById('new-followup').value = '';
+  setNewStatus('done');
+}
+
+function setNewStatus(status) {
+  newEntryStatus = status;
+  document.querySelectorAll('#new-status-group .edit-status-btn').forEach(btn => {
+    const s = btn.dataset.status;
+    btn.className = 'edit-status-btn' + (s === status ? ` sel sel-${s}` : '');
+  });
+}
+
+async function saveNewEntry() {
+  const task = document.getElementById('new-task').value.trim();
+  if (!task) { document.getElementById('new-task').focus(); return; }
+
+  const btn = document.getElementById('new-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  const date = new Date().toISOString().slice(0, 10);
+  const payload = {
+    completed: newEntryStatus === 'done',
+    status: newEntryStatus,
+    task_summary: task.slice(0, 200),
+    notes: document.getElementById('new-notes').value.trim().slice(0, 500),
+    follow_up: document.getElementById('new-followup').value.trim().slice(0, 200),
+    date: date,
+    timestamp: new Date().toISOString()
+  };
+
+  const commentBody = `COMPLETION_DATA:${JSON.stringify(payload)}\n\n---\n*Created via Taos Build Intel dashboard*`;
+  const taskShort = payload.task_summary.slice(0, 50);
+
+  const r = await ghPost('issues', {
+    title: `Feedback: ${date} — ${taskShort}`,
+    body: commentBody,
+    labels: ['daily-digest', 'tracking']
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Save';
+
+  if (r && r.ok) {
+    payload.task_id = buildTaskId(date, payload.task_summary);
+    allEntries.unshift(payload);
+    try { sessionStorage.removeItem(CACHE_KEY); } catch(e) {}
+    closeNewEntry();
+    renderEntries(allEntries);
+    updateSummary(allEntries);
+  } else {
+    alert('Could not save. Please try again.');
+  }
+}
+
+// ===== Init =====
+async function init() {
+  const date  = getParam('date');
+  const task  = getParam('task');
+  const issue = getParam('issue');
+
+  // Show form card if arriving from email with task context
+  if (task || issue) {
+    const formCard = document.getElementById('form-card');
+    formCard.style.display = 'block';
+
+    const titleEl = document.getElementById('form-task-title');
+    if (task) {
+      titleEl.textContent = decodeURIComponent(task);
+    } else if (issue) {
+      fetchTaskFromIssue(issue).then(t => {
+        titleEl.textContent = t || "Task from today's digest";
+      });
+    }
+
+    setupCounter('form-notes', 'notes-counter', 500);
+    setupCounter('form-followup', 'followup-counter', 200);
+    restoreDraft();
+    document.getElementById('form-notes').dispatchEvent(new Event('input'));
+    document.getElementById('form-followup').dispatchEvent(new Event('input'));
+    document.getElementById('form-notes').addEventListener('input', saveDraft);
+    document.getElementById('form-followup').addEventListener('input', saveDraft);
+  }
+
+  // Load journal entries
+  if (FEEDBACK_PAT === 'FEEDBACK_PAT_PLACEHOLDER') {
+    document.getElementById('entries-container').innerHTML =
+      '<div class="empty-state"><p>Deploy via GitHub Pages to enable full functionality.</p></div>';
+    return;
+  }
+
+  try {
+    allEntries = await fetchEntries();
+    updateSummary(allEntries);
+    renderEntries(allEntries);
+  } catch(e) {
+    console.error('Load error:', e);
+    document.getElementById('entries-container').innerHTML =
+      '<div class="empty-state"><p>Could not load journal. Please try again.</p></div>';
+  }
 }
 
 init();
