@@ -57,6 +57,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_FEEDBACK_TOKEN }}
         run: python parse_feedback.py
 
+      - name: Pre-research agent
+        if: steps.dedup.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python research_agent.py
+
       - name: Run daily digest
         if: steps.dedup.outputs.skip != 'true'
         env:
@@ -72,6 +79,6 @@ jobs:
         run: |
           git config user.name "Taos Build Bot"
           git config user.email "bot@taos-build.local"
-          git add --ignore-errors data/listing_cache.json data/learning_history.json
+          git add --ignore-errors data/listing_cache.json data/learning_history.json data/research_cache.json
           git diff --staged --quiet || git commit -m "Update caches $(date -u +%Y-%m-%d)"
           git push

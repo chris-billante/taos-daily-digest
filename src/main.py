@@ -60,6 +60,7 @@ CONSTRAINTS: dict = {}
 LISTING_CACHE: dict = {}
 LEARNING_HIST: list = []
 NOTES: dict = {"completions": []}
+RESEARCH: dict = {"sections": {}}
 
 
 def now_mt() -> datetime:
@@ -107,6 +108,17 @@ def extract_action_line(content: str) -> str:
         if line and len(line) > 15 and not line.startswith('**'):
             return line[:160]
     return "Today's action item"
+
+def research_block(section: str) -> str:
+    """Return pre-researched findings for a section, if available."""
+    data = RESEARCH.get("sections", {}).get(section, "")
+    if not data:
+        return ""
+    return (
+        f"\n\nPRE-RESEARCHED FINDINGS (incorporate relevant items, "
+        f"verify links are current):\n{data}"
+    )
+
 
 def latest_follow_up() -> str:
     """Return the most recent follow_up from Angela's completions, if any."""
@@ -157,10 +169,29 @@ def ask(prompt: str, max_tok: int = MAX_TOKENS) -> str:
             return ""
 
 # --- Clean + Format ---
-SKIP = [r"^I('ll| will| need to) (search|look)\b.*", r"^Let me (search|find|check)\b.*",
-    r"^Based on my search\b.*", r"^Perfect\.?\s*\b.*", r"^Great\.?\s*\b.*",
-    r"^Here('s| is| are) what I\b.*", r"^Searching\b.*", r"^I found\b.*",
-    r"^Unfortunately\b.*", r"^I was unable\b.*", r"^I could not\b.*"]
+SKIP = [
+    r"^I('ll| will| need to) (search|look)\b.*",
+    r"^Let me (search|find|check)\b.*",
+    r"^Based on (my |the )?(search|research)\b.*",
+    r"^Perfect\.?\s*\b.*",
+    r"^Great\.?\s*\b.*",
+    r"^Here('s| is| are) what I\b.*",
+    r"^Searching\b.*",
+    r"^I found\b.*",
+    r"^Unfortunately\b.*",
+    r"^I was unable\b.*",
+    r"^I could not\b.*",
+    r"^However,? I (notice|should|want)\b.*",
+    r"^I notice\b.*",
+    r"^I'll provide\b.*",
+    r"^I have enough information\b.*",
+    r"^MATCHING YOUR CRITERIA:?$",
+    r"^Here are\b.*",
+    r"^Below (is|are)\b.*",
+    r"^For today\b.*I('ll| will)\b.*",
+    r"^Based on (available|current|the)\b.*",
+    r"^After (searching|reviewing|checking)\b.*",
+]
 
 def clean_response(txt: str) -> str:
     if not txt: return ""
@@ -249,13 +280,23 @@ def content_to_html(content: str) -> str:
 
 
 def section(anchor: str, emoji: str, title: str, content: str,
-            border_color: str = "#1B3A5C", raw_html: bool = False) -> str:
+            border_color: str = "#1B3A5C", raw_html: bool = False,
+            action_url: str = "") -> str:
     """Render an email section as a styled card."""
     if not content:
         return ""
     body = content.strip() if raw_html else content_to_html(content)
     if not body:
         return ""
+    btn_html = ""
+    if action_url:
+        btn_html = (
+            f'\n  <div style="margin-top:12px">'
+            f'<a href="{action_url}" style="display:inline-block;'
+            f'background:#16a34a;color:#fff;padding:10px 20px;'
+            f'border-radius:6px;text-decoration:none;font-size:13px;'
+            f'font-weight:600">Save Progress &amp; Notes</a></div>'
+        )
     return f'''<table id="{anchor}" width="100%" cellpadding="0" cellspacing="0" border="0"
   style="margin-bottom:16px;border-collapse:collapse">
 <tr><td style="background:{border_color};height:4px;border-radius:6px 6px 0 0" colspan="2"></td></tr>
@@ -263,7 +304,7 @@ def section(anchor: str, emoji: str, title: str, content: str,
   <div style="font-size:17px;font-weight:700;color:{border_color};margin-bottom:10px">
     {emoji} {title}
   </div>
-  <div style="color:#334155;line-height:1.6">{body}</div>
+  <div style="color:#334155;line-height:1.6">{body}</div>{btn_html}
 </td></tr>
 </table>'''
 
@@ -276,24 +317,53 @@ def p_action() -> str:
     ctx_section = f"\n\n{ctx}" if ctx else ""
     fu = latest_follow_up()
     fu_section = f"\n\nANGELA'S PRIORITY FOLLOW-UP (suggest this first if still relevant): {fu}" if fu else ""
-    return ask(f"""One task for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
-Builders: Zook Cabins, Mighty Small Homes, DC Structures.
-Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK, water hookup not needed.
+    bs = CONSTRAINTS["builders"]["active"]
+    b = bs[now_mt().timetuple().tm_yday % len(bs)]
+    builder_ctx = builder_notes_block()
+    builder_section = f"\n\n{builder_ctx}" if builder_ctx else ""
+    return ask(f"""Generate TWO action items for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
+
+PRIMARY ACTION (rotate: land, lenders, off-grid learning, outreach):
+Builders: Zook Cabins (https://zookcabins.com), Mighty Small Homes (https://mightysm.com), DC Structures (https://dcstructures.com — Deschutes: https://dcstructures.com/kits/deschutes/, Rogue: https://dcstructures.com/kits/rogue/).
+Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK.
+Recommended agents for land: Crystal Martinez, NM Real Estate Group (575) 779-6482; Lisa Cancro, Taos Properties (taosproperties.com); Luisa Guercini, Berkshire Hathaway Taos.
+
+BUILDER CHECK-IN: Today's builder: {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
+Get latest pricing, delivery to NM, reviews, or comparable alternatives.{builder_section}{research_block("builders")}
 {ctx_section}{fu_section}
-Format exactly:
+
+Format EXACTLY (no intro text, no explanation, jump straight into the format):
 **Action:** [what to do]
-**Contact:** [name, phone/URL]
+**Contact:** [name, phone/URL with clickable link]
+**Why:** [one sentence — factual, not marketing fluff]
+{SCRIPT}
+
+---
+
+**Action:** [what to do for builder check-in]
+**Contact:** [name, phone/URL with clickable link]
 **Why:** [one sentence]
 {SCRIPT}
-Rotate: land, builders, lenders, off-grid learning, outreach. Today: {today_long()}
-Output ONLY the task.""", 512)
+
+Today: {today_long()}. Output ONLY the two actions separated by ---. No preamble. No titles like "Action 1". Start directly with **Action:**.""", 1024)
 
 def p_land() -> str:
     areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
     return ask(f"""Land for sale in Taos County NM: {areas}. Min {CONSTRAINTS['land']['min_acres']} acres, under ${CONSTRAINTS['land']['max_price']:,}.
 Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
-For each: Price | Acres | Location | Water if known | Road | URL.
-Under $50K with water = HIGH PRIORITY. Today: {today()}. Output ONLY listings.""")
+For each listing use this format:
+- $PRICE | ACRES acres | LOCATION | Water: [yes/none/unknown] | Road: [paved/dirt/unknown] | [Link text](URL)
+Under $50K with water = mark as 🔴 HIGH PRIORITY.
+No headers like "MATCHING YOUR CRITERIA" — jump straight into the listings.
+
+After listings, add:
+---
+**Recommended Land Agents:**
+- Crystal Martinez, NM Real Estate Group — (575) 779-6482 · [crystalmartinez.realtor](https://www.crystalmartinez.realtor/) — 7 active Taos County land listings, covers Tres Piedras to Arroyo Hondo
+- Lisa Cancro, Taos Properties — [taosproperties.com](https://taosproperties.com/) — 2024 Realtor of the Year, 30+ years land/commercial experience
+- Luisa Guercini, Berkshire Hathaway Taos — #1 brokerage in Taos Valley since 1987, land sale specialist
+
+Today: {today()}. Output listings first, then agent section.{research_block("land")}{research_block("agents")}""")
 
 def p_builders() -> str:
     bs = CONSTRAINTS["builders"]["active"]
@@ -308,14 +378,17 @@ Bullets with links.
 Today: {today()}. Output ONLY findings.""")
 
 def p_offgrid() -> str:
-    return ask(f"""Off-grid and alternative housing news for northern New Mexico:
-1. NM solar incentives or legislation 2025-2026
-2. Taos County building or zoning changes
-3. Alternative housing ideas for Taos County - earthships, container homes, A-frames, dome homes, yurts as permanent structures, park models, or any creative small housing that is IRC or CID approvable in NM
-4. NM CID updates on modular or kit homes
-5. Taos-area off-grid community news or events
-6. NM water rights or well drilling updates
-Brief summaries with links. Today: {today()}. Output ONLY items.""")
+    return ask(f"""Off-grid and alternative housing news for northern New Mexico. Output as bullet list — no intro paragraph.
+Topics to cover (pick 3-4 with real news or updates):
+- NM solar incentives or legislation 2025-2026
+- Taos County building or zoning changes
+- Alternative housing: earthships, container homes, A-frames, dome homes, park models, or creative small housing IRC/CID approvable in NM
+- NM CID updates on modular or kit homes
+- Taos-area off-grid community news or events
+- NM water rights or well drilling updates
+Each bullet: **Topic** — 1-2 sentence summary with [link](URL).
+No preamble. No "Based on my research." Start with the first bullet.
+Today: {today()}. Output ONLY items.{research_block("offgrid")}""")
 
 def format_tacoma_results(new_listings: list, all_listings: list, fb_urls: list) -> str:
     """Format scraped Tacoma listings as section-compatible markdown."""
@@ -383,12 +456,22 @@ Today: {today()}. Output ONLY listings.""")
     return "\n\n".join(parts) if parts else ""
 
 def p_bridge() -> str:
-    return ask(f"""Bridge housing near Taos NM:
-YURTS: Colorado Yurt Company + Pacific Yurts pricing for 20-24ft insulated. Sales? Lead times?
+    return ask(f"""Bridge/temporary housing options near Taos NM. Jump straight into listings — no intro paragraph.
+
+## Yurts
+Colorado Yurt Company + Pacific Yurts: pricing for 20-24ft insulated. Current sales? Lead times?
 {SCRIPT}
-RV/5TH WHEEL: For sale in NM or southern CO, under $45K, year-round at 7000ft. Specific listings with price, year, model, location, link.
-FURNISHED RENTALS: Taos month-to-month furnished under $2500. Specific listings from Furnished Finder, Airbnb monthly, Craigslist. Price, location, link.
-Bullets with links. Skip empty sections. Today: {today()}. Output ONLY options.""")
+
+## RV / 5th Wheel
+For sale in NM or southern CO, under $45K, year-round capable at 7000ft.
+Each: Year, Model, Price, Location, [Link](URL)
+
+## Furnished Rentals
+Taos month-to-month furnished under $2500.
+Each: $Price/mo, Location, Source, [Link](URL)
+
+No preamble. No "Based on my research" or "I found limited." If a section has no results, write "No current listings found" and move on. Start with ## Yurts.
+Today: {today()}. Output ONLY the sections.{research_block("bridge")}""")
 
 def p_learn() -> str:
     # v4.0: Try web search first, fall back to curated library
@@ -501,7 +584,7 @@ def build_email(sections: dict) -> tuple[str, str]:
                 repo_name=REPO_NAME,
                 github_token=os.environ["GITHUB_TOKEN"]
             )
-            section_names = ["Action Item", "Land Listings", "Builder Intel", "Off-Grid News", 
+            section_names = ["Action Item", "Land Listings", "Off-Grid News",
                            "Dashboard", "Tacoma & Van", "Bridge Housing", "Learning Resource"]
             issue_number = tracker.create_digest_issue(dt.strftime("%A, %B %d, %Y"), section_names)
             log.info(f"Created tracking issue #{issue_number}")
@@ -517,7 +600,7 @@ def build_email(sections: dict) -> tuple[str, str]:
     date_str    = now_mt().strftime("%Y-%m-%d")
     issue_param = f"&issue={issue_number}" if issue_number else ""
     feedback_url = f"{FEEDBACK_BASE_URL}?date={date_str}&task={task_enc}{issue_param}"
-    journal_url  = f"https://{REPO_OWNER}.github.io/{REPO_NAME}/journal/"
+    dashboard_url = f"https://{REPO_OWNER}.github.io/{REPO_NAME}/feedback/"
 
     # Hero action card — prominent, separate from other sections
     action_body = content_to_html(action_content) if action_content else "<p>No action item today.</p>"
@@ -531,24 +614,30 @@ def build_email(sections: dict) -> tuple[str, str]:
     <a href="{feedback_url}"
        style="display:inline-block;background:#16a34a;color:#fff;padding:12px 28px;border-radius:6px;
               text-decoration:none;font-size:15px;font-weight:700;min-height:44px">
-      Mark Done &amp; Add Notes
+      Save Progress &amp; Notes
     </a>
   </div>
 </td></tr></table>'''
 
+    # Section-specific feedback URLs
+    def section_fb(task_label: str) -> str:
+        enc = urllib.parse.quote(task_label)
+        return f"{FEEDBACK_BASE_URL}?date={date_str}&task={enc}{issue_param}"
+
     # Research sections
     sec = ""
-    sec += section("land", "🏜️", "LAND LISTINGS", sections.get("land",""), "#b45309")
-    sec += section("builders", "🏠", "BUILDER INTEL", sections.get("builders",""), "#059669")
-    sec += section("offgrid", "⚡", "OFF-GRID & HOUSING", sections.get("offgrid",""), "#7C3AED")
+    sec += section("land", "🏜️", "LAND LISTINGS", sections.get("land",""), "#b45309",
+                   action_url=section_fb("Review land listings"))
+    sec += section("offgrid", "⚡", "IN THE NEWS: OFF-GRID HOUSING", sections.get("offgrid",""), "#7C3AED")
     sec += section("tacoma", "🚐", "TACOMA & VAN MARKET", sections.get("vehicles",""), "#475569")
-    sec += section("bridge", "🏕️", "BRIDGE HOUSING", sections.get("bridge",""), "#0e7490")
+    sec += section("bridge", "🏕️", "BRIDGE HOUSING", sections.get("bridge",""), "#0e7490",
+                   action_url=section_fb("Research bridge housing options"))
     sec += section("learn", "📚", "LEARNING RESOURCE", sections.get("learning",""), "#6d28d9")
     sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
     # TOC with clickable anchor links
     toc_links = [
-        ("action", "🔑 Action"), ("land", "🏜️ Land"), ("builders", "🏠 Builders"),
+        ("action", "🔑 Action"), ("land", "🏜️ Land"),
         ("offgrid", "⚡ Off-Grid"), ("tacoma", "🚐 Tacoma"), ("bridge", "🏕️ Housing"),
         ("learn", "📚 Learn"), ("dash", "📊 Dashboard")]
     toc = " &nbsp;&middot;&nbsp; ".join(
@@ -585,20 +674,20 @@ def build_email(sections: dict) -> tuple[str, str]:
     style="margin:8px 0 12px;border-collapse:collapse">
   <tr>
     <td style="text-align:center;padding:12px">
-      <a href="{journal_url}"
+      <a href="{dashboard_url}"
          style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 22px;
                 border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;
-                margin:0 4px">📓 My Journal</a>
+                margin:0 4px">My Dashboard</a>
       <a href="{feedback_url}"
          style="display:inline-block;background:#16a34a;color:#fff;padding:10px 22px;
                 border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;
-                margin:0 4px">Add Notes</a>
+                margin:0 4px">Save Progress & Notes</a>
     </td>
   </tr></table>
 
   <!-- Footer -->
   <div style="text-align:center;padding:10px;font-size:11px;color:#94a3b8">
-    Taos Off-Grid Homestead &nbsp;|&nbsp; Daily Briefing v5.0
+    Taos Off-Grid Homestead &nbsp;|&nbsp; Daily Briefing v5.1
   </div>
 
 </td></tr></table>
@@ -632,9 +721,9 @@ def send(subj: str, html: str) -> None:
 
 # --- Main ---
 def main() -> None:
-    global CONSTRAINTS, LISTING_CACHE, LEARNING_HIST, NOTES
+    global CONSTRAINTS, LISTING_CACHE, LEARNING_HIST, NOTES, RESEARCH
 
-    log.info("v4.0 Starting - Full integration active")
+    log.info("v5.1 Starting - Full integration active")
     if not API_KEY:
         log.error("No API key")
         sys.exit(1)
@@ -643,6 +732,13 @@ def main() -> None:
     CONSTRAINTS = load_json(DATA / "constraints.json")
     LISTING_CACHE = load_json(DATA / "listing_cache.json")
     LEARNING_HIST = load_json(DATA / "learning_history.json")
+    research_file = DATA / "research_cache.json"
+    if research_file.exists():
+        RESEARCH = load_json(research_file)
+        log.info("Research cache loaded (%d sections)",
+                 len(RESEARCH.get("sections", {})))
+    else:
+        log.info("No research cache — prompts will use live search only")
     notes_file = DATA / "context_notes.json"
     NOTES = load_json(notes_file) if notes_file.exists() else {"completions": []}
 
@@ -650,7 +746,6 @@ def main() -> None:
     streams = [
         ("action",   "Action",    p_action),
         ("land",     "Land",      p_land),
-        ("builders", "Builders",  p_builders),
         ("offgrid",  "Off-Grid",  p_offgrid),
         ("vehicles", "Vehicles",  p_vehicles),
         ("bridge",   "Bridge",    p_bridge),
