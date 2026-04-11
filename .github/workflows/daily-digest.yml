@@ -5,7 +5,13 @@ on:
     # 7:00 AM Mountain Time = 14:00 UTC (MST/UTC-7)
     # During MDT (Mar-Nov): 13:00 UTC
     - cron: '0 14 * * *'
-  workflow_dispatch: # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Send even if digest already sent today'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -19,21 +25,40 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Check for duplicate digest
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TODAY=$(TZ=America/Denver date +%Y-%m-%d)
+          TITLE="Daily Digest Tracking: ${TODAY}"
+          MATCH=$(gh issue list --state all --search "in:title \"${TITLE}\"" --json title --jq ".[].title" | grep -Fc "${TITLE}" || true)
+          if [[ "${MATCH}" -gt 0 && "${{ inputs.force }}" != "true" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Digest already sent for ${TODAY}, skipping (use force=true to override)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Python
+        if: steps.dedup.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.dedup.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
       - name: Parse feedback & build context
+        if: steps.dedup.outputs.skip != 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GH_FEEDBACK_TOKEN }}
         run: python parse_feedback.py
 
       - name: Run daily digest
+        if: steps.dedup.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
@@ -43,9 +68,10 @@ jobs:
         run: python src/main.py
 
       - name: Commit cache updates
+        if: steps.dedup.outputs.skip != 'true'
         run: |
           git config user.name "Taos Build Bot"
           git config user.email "bot@taos-build.local"
-          git add data/*.json
-          git diff --staged --quiet || git commit -m "📊 Update caches $(date -u +%Y-%m-%d)"
+          git add --ignore-errors data/listing_cache.json data/learning_history.json
+          git diff --staged --quiet || git commit -m "Update caches $(date -u +%Y-%m-%d)"
           git push
