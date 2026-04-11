@@ -74,7 +74,7 @@ def today_long() -> str:
 def recent_completions(days: int = 7) -> list[dict]:
     """Return completions from the last N days, newest first."""
     cutoff = (now_mt().date() - timedelta(days=days)).isoformat()
-    return [c for c in NOTEsections.get("completions", [])
+    return [c for c in NOTES.get("completions", [])
             if c.get("date", "") >= cutoff]
 
 def recent_context_block(days: int = 7) -> str:
@@ -109,7 +109,7 @@ def extract_action_line(content: str) -> str:
 
 def builder_notes_block() -> str:
     """Extract notes from completions that mention known builders."""
-    builder_names = [b["name"].lower() for b in CONSTRAINTsections.get("builders", {}).get("active", [])]
+    builder_names = [b["name"].lower() for b in CONSTRAINTS.get("builders", {}).get("active", [])]
     relevant = []
     for c in recent_completions(days=14):
         task_lower = c.get("task_summary", "").lower()
