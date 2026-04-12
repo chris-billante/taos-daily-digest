@@ -364,7 +364,7 @@ After listings, add:
 - Lisa Cancro, Taos Properties — [taosproperties.com](https://taosproperties.com/) — 2024 Realtor of the Year, 30+ years land/commercial experience
 - Luisa Guercini, Berkshire Hathaway Taos — #1 brokerage in Taos Valley since 1987, land sale specialist
 
-Today: {today()}. Output listings first, then agent section.{research_block("land")}{research_block("agents")}""")
+Today: {today()}. Output listings first, then agent section.{research_block("land")}""")
 
 def p_builders() -> str:
     bs = CONSTRAINTS["builders"]["active"]
@@ -379,9 +379,11 @@ Bullets with links.
 Today: {today()}. Output ONLY findings.""")
 
 def p_offgrid() -> str:
+    og = CONSTRAINTS.get("offgrid_systems", {})
     return ask(f"""Off-grid and alternative housing news for northern New Mexico. Output as bullet list — no intro paragraph.
+Our planned systems: Solar: {og.get('solar', 'TBD')}. Heating: {og.get('heating', 'TBD')}. Hot water: {og.get('hot_water', 'TBD')}. Water: {og.get('water', 'TBD')}.
 Topics to cover (pick 3-4 with real news or updates):
-- NM solar incentives or legislation 2025-2026
+- NM solar incentives or legislation 2025-2026 (especially relevant to our EG4/IronRidge setup)
 - Taos County building or zoning changes
 - Alternative housing: earthships, container homes, A-frames, dome homes, park models, or creative small housing IRC/CID approvable in NM
 - NM CID updates on modular or kit homes
@@ -457,14 +459,17 @@ Today: {today()}. Output ONLY listings.""")
     return "\n\n".join(parts) if parts else ""
 
 def p_bridge() -> str:
+    bh = CONSTRAINTS.get("bridge_housing", {})
+    suppliers = ", ".join(bh.get("yurt_suppliers", ["Colorado Yurt Company", "Pacific Yurts"]))
+    rv_max = bh.get("rv_budget_max", 45000)
     return ask(f"""Bridge/temporary housing options near Taos NM. Jump straight into listings — no intro paragraph.
 
 ## Yurts
-Colorado Yurt Company + Pacific Yurts: pricing for 20-24ft insulated. Current sales? Lead times?
+{suppliers}: pricing for 20-24ft insulated. Current sales? Lead times?
 {SCRIPT}
 
 ## RV / 5th Wheel
-For sale in NM or southern CO, under $45K, year-round capable at 7000ft.
+For sale in NM or southern CO, under ${rv_max:,}, year-round capable at 7000ft.
 Each: Year, Model, Price, Location, [Link](URL)
 
 ## Furnished Rentals
@@ -636,14 +641,13 @@ def build_email(sections: dict) -> tuple[str, str]:
     sec += section("learn", "📚", "LEARNING RESOURCE", sections.get("learning",""), "#6d28d9")
     sec += section("dash", "📊", "PROJECT DASHBOARD", dashboard(), "#1B3A5C", raw_html=True)
 
-    # TOC with clickable anchor links
-    toc_links = [
-        ("action", "🔑 Action"), ("land", "🏜️ Land"),
-        ("offgrid", "⚡ Off-Grid"), ("tacoma", "🚐 Tacoma"), ("bridge", "🏕️ Housing"),
-        ("learn", "📚 Learn"), ("dash", "📊 Dashboard")]
+    # TOC — visual only (Gmail/Outlook strip id attrs, breaking anchor links)
+    toc_labels = [
+        "🔑 Action", "🏜️ Land", "⚡ Off-Grid",
+        "🚐 Tacoma", "🏕️ Housing", "📚 Learn", "📊 Dashboard"]
     toc = " &nbsp;&middot;&nbsp; ".join(
-        f'<a href="#{a}" style="color:#fff;text-decoration:none;font-size:12px;'
-        f'font-weight:500;opacity:0.9">{lbl}</a>' for a, lbl in toc_links)
+        f'<span style="color:#fff;font-size:12px;font-weight:500;'
+        f'opacity:0.9">{lbl}</span>' for lbl in toc_labels)
 
     html = f'''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -765,7 +769,7 @@ def main() -> None:
             log.error(f"  FAIL {label}: {e}", exc_info=True)
             return key, label, ""
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=2) as pool:
         futures = {
             pool.submit(_run_stream, k, lbl, fn): k
             for k, lbl, fn in streams

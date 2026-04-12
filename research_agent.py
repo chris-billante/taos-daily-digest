@@ -15,7 +15,6 @@ import os
 import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -26,6 +25,7 @@ DATA = ROOT / "data"
 CACHE_FILE = DATA / "research_cache.json"
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+DELAY = int(os.environ.get("RESEARCH_DELAY", "8"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,7 +102,7 @@ def search(prompt: str, max_tokens: int = 1024) -> str:
             ).strip()
             return clean(raw)
         except anthropic.RateLimitError:
-            wait = min(30 * (2 ** attempt), 120)
+            wait = min(60 * (2 ** attempt), 180)
             if attempt < 2:
                 log.warning("Rate limit (%d/3), wait %ds", attempt + 1, wait)
                 time.sleep(wait)
@@ -130,7 +130,7 @@ TONE = (
 
 
 def research_land(cfg: dict) -> str:
-    """Fresh land listings and market data."""
+    """Fresh land listings, market data, and top-rated land agents."""
     areas = ", ".join(cfg["land"]["target_areas"])
     return search(f"""Current vacant land for sale in Taos County NM.
 Target areas: {areas}.
@@ -142,6 +142,10 @@ For each listing found:
 - $PRICE | ACRES acres | LOCATION | Water: [status] | Road: [type] | Source: [site] | URL
 
 Also note any market trends: price changes, new subdivisions, seasonal patterns.
+
+Also list top-rated real estate agents specializing in vacant land sales in
+Taos County NM. Focus on agents with active land listings covering
+{areas}. For each agent: Name, brokerage, phone, website, specializations.
 
 {TONE}
 Today: {now_mt().strftime('%B %d, %Y')}.""")
@@ -201,23 +205,8 @@ For listings: Price, description, location, source URL.
 Today: {now_mt().strftime('%B %d, %Y')}.""", 768)
 
 
-def research_agents() -> str:
-    """Top-rated land agents in Taos County."""
-    return search(f"""Top-rated real estate agents specializing in vacant land
-sales in Taos County, New Mexico. Focus on agents with:
-- Active land listings (not just residential homes)
-- Coverage of Tres Piedras, Arroyo Hondo, Carson, Ojo Caliente areas
-- Client reviews mentioning land, off-grid, or rural transactions
-
-For each agent: Name, brokerage, phone, website, number of land listings,
-notable reviews or specializations.
-
-{TONE}
-Today: {now_mt().strftime('%B %d, %Y')}.""", 768)
-
-
 def main() -> None:
-    """Run all research queries and write cache."""
+    """Run all research queries sequentially and write cache."""
     if not API_KEY:
         log.error("No ANTHROPIC_API_KEY set")
         sys.exit(1)
@@ -230,33 +219,22 @@ def main() -> None:
     }
 
     queries = [
-        ("land", "Land listings", lambda: research_land(cfg)),
+        ("land", "Land + agents", lambda: research_land(cfg)),
         ("builders", "Builder intel", lambda: research_builders(cfg)),
         ("offgrid", "Off-grid news", research_offgrid),
         ("bridge", "Bridge housing", research_bridge),
-        ("agents", "Land agents", research_agents),
     ]
 
-    def _run_query(
-        key: str, label: str, fn: object,
-    ) -> tuple[str, str, str]:
+    for key, label, fn in queries:
         log.info("Researching: %s", label)
         try:
             result = fn()
+            cache["sections"][key] = result
             log.info("  %s: %d chars", label, len(result))
-            return key, label, result
         except Exception as e:
             log.error("  %s FAILED: %s", label, e, exc_info=True)
-            return key, label, ""
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {
-            pool.submit(_run_query, key, label, fn): key
-            for key, label, fn in queries
-        }
-        for future in as_completed(futures):
-            key, label, result = future.result()
-            cache["sections"][key] = result
+            cache["sections"][key] = ""
+        time.sleep(DELAY)
 
     # Write cache
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
