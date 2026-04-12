@@ -361,21 +361,124 @@ Format EXACTLY (no intro text, no explanation, jump straight into the format):
 
 Today: {today_long()}. Output ONLY the two actions separated by ---. No preamble. No titles like "Action 1". Start directly with **Action:**.""", 1024)
 
+def format_land_results(
+    new_listings: list, all_listings: list, manual: list
+) -> str:
+    """Format scraped land listings as section-compatible markdown."""
+    parts = []
+    if new_listings:
+        n = len(new_listings)
+        parts.append(
+            f"## \U0001f195 {n} New Listing{'s' if n != 1 else ''}"
+            " Since Last Scan"
+        )
+        for lst in new_listings[:15]:
+            price = (
+                f"${lst['price_num']:,}" if lst.get("price_num")
+                else lst.get("price", "N/A")
+            )
+            acres = (
+                f"{lst['acres_num']:.1f} acres" if lst.get("acres_num")
+                else lst.get("acres", "N/A")
+            )
+            loc = lst.get("location", "?")
+            src = lst.get("source", "")
+            link = (
+                f" · [View]({lst['url']})" if lst.get("url") else ""
+            )
+            prefix = (
+                "\U0001f534 HIGH PRIORITY " if lst.get("high_priority")
+                else "⭐ " if lst.get("priority") else ""
+            )
+            parts.append(
+                f"- {prefix}**{lst.get('title', 'Land')}** | "
+                f"{price} | {acres} | {loc} · {src}{link}"
+            )
+    else:
+        parts.append("## No New Listings Today")
+        parts.append(
+            "No new matches since the last scan. "
+            "Existing listings below are still active."
+        )
+
+    if all_listings:
+        parts.append(
+            f"## \U0001f4cb All Active Matches ({len(all_listings)})"
+        )
+        for lst in all_listings[:15]:
+            price = (
+                f"${lst['price_num']:,}" if lst.get("price_num")
+                else lst.get("price", "N/A")
+            )
+            acres = (
+                f"{lst['acres_num']:.1f} acres" if lst.get("acres_num")
+                else lst.get("acres", "N/A")
+            )
+            link = (
+                f" · [View]({lst['url']})" if lst.get("url") else ""
+            )
+            parts.append(
+                f"- {lst.get('title', '?')} | {price} | {acres} | "
+                f"{lst.get('location', '?')} · "
+                f"{lst.get('source', '')}{link}"
+            )
+        if len(all_listings) > 15:
+            parts.append(
+                f"  _(+{len(all_listings) - 15} more "
+                "— see manual links below)_"
+            )
+
+    if manual:
+        parts.append("## \U0001f50d Browse More Listings")
+        for m in manual:
+            parts.append(f"- [{m['title']}]({m['url']})")
+
+    return "\n".join(parts)
+
+
 def p_land() -> str:
     land = CONSTRAINTS["land"]
     areas = ", ".join(land["target_areas"])
+
+    # Tier 1+2: real scraped listings
+    land_txt = ""
+    try:
+        from land_tracker import run_land_search
+        new_l, all_l, manual = run_land_search(DATA)
+        land_txt = format_land_results(new_l, all_l, manual)
+        log.info(
+            "Land tracker: %d new / %d total",
+            len(new_l), len(all_l),
+        )
+    except Exception as e:
+        log.warning("Land tracker failed: %s", e, exc_info=True)
+
+    # Claude search for market intel only (trends, not listings)
     realtor = CONSTRAINTS.get("contacts", {}).get("realtor", "")
-    realtor_line = f"\nRecommended realtor: {realtor}" if realtor else ""
-    return ask(f"""Land for sale in {land['county']} {land['state']}: {areas}. Min {land['min_acres']} acres, under ${land['max_price']:,}.
-Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
-For each listing use this format:
-- $PRICE | ACRES acres | LOCATION | Water: [yes/none/unknown] | Road: [paved/dirt/unknown] | [Link text](URL)
-Under $50K with water = mark as 🔴 HIGH PRIORITY.
-No headers like "MATCHING YOUR CRITERIA" — jump straight into the listings.
+    realtor_line = (
+        f"\nRecommended realtor: {realtor}" if realtor else ""
+    )
+    market_intel = ask(
+        f"""Taos County NM vacant land market trends for """
+        f"""{areas}. Budget under ${land['max_price']:,}, """
+        f"""{land['min_acres']}+ acres.
+"""
+        f"""Cover: price trends, days on market, new """
+        f"""subdivisions, county zoning changes.
+"""
+        f"""2-3 bullet points with links. No listings.
+{realtor_line}
+"""
+        f"""Today: {today()}. Output ONLY market trends."""
+        f"""{research_block('land')}"""
+    )
 
-After listings, add a **Recommended Land Agents** section — search for top-rated agents specializing in vacant land in {land['county']}, {land['state']} covering {areas}.{realtor_line}
-
-Today: {today()}. Output listings first, then agent section.{research_block("land")}""")
+    parts = []
+    if land_txt:
+        parts.append(land_txt)
+    if market_intel:
+        parts.append(f"## \U0001f4ca Market Intelligence\n{market_intel}")
+    return "\n\n".join(parts) if parts else ""
 
 def p_builders() -> str:
     bs = CONSTRAINTS["builders"]["active"]
