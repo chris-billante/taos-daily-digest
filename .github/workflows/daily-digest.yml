@@ -83,4 +83,5 @@ jobs:
           git config user.email "bot@taos-build.local"
           git add --ignore-errors data/listing_cache.json data/learning_history.json data/research_cache.json
           git diff --staged --quiet || git commit -m "Update caches $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main || true
           git push
