@@ -7,7 +7,7 @@ Fixes:
 """
 
 import re
-from typing import Dict, List
+
 
 def strip_claude_preamble(text: str) -> str:
     """
@@ -19,7 +19,7 @@ def strip_claude_preamble(text: str) -> str:
     - Single-sentence intros before actual content
     """
     lines = text.split('\n')
-    
+
     # Patterns that indicate Claude narration
     preamble_patterns = [
         r"^I'll\s",
@@ -33,35 +33,34 @@ def strip_claude_preamble(text: str) -> str:
         r"^I've\s+searched",
         r"^After\s+searching",
     ]
-    
+
     cleaned_lines = []
-    skip_next = False
-    
-    for i, line in enumerate(lines):
+
+    for line in lines:
         stripped = line.strip()
-        
+
         # Skip empty lines at start
         if not cleaned_lines and not stripped:
             continue
-            
+
         # Check if this line is preamble
         is_preamble = any(re.match(pattern, stripped, re.IGNORECASE) for pattern in preamble_patterns)
-        
+
         if is_preamble:
             # Skip this line and check if next line is also intro fluff
             continue
-            
+
         cleaned_lines.append(line)
-    
+
     result = '\n'.join(cleaned_lines)
-    
+
     # Remove leading empty lines from final result
     result = result.lstrip('\n')
-    
+
     return result
 
 
-def extract_search_params(prompt: str) -> Dict[str, str]:
+def extract_search_params(prompt: str) -> dict[str, str]:
     """
     Extract the actual search intent from the prompt.
     Returns a human-readable description of what was searched.
@@ -76,7 +75,7 @@ def extract_search_params(prompt: str) -> Dict[str, str]:
         'vehicle_search': 'Toyota Tacoma Double Cab Long Bed 4WD: 2020-2023, under $40K, under 60K miles',
         'bridge_housing': 'Taos short-term rentals, yurts compatible with EG4 solar, used fifth wheels'
     }
-    
+
     # Try to identify which prompt this is from the content
     for key, description in search_descriptions.items():
         if key.replace('_', ' ').lower() in prompt.lower():
@@ -84,7 +83,7 @@ def extract_search_params(prompt: str) -> Dict[str, str]:
                 'query_type': key.replace('_', ' ').title(),
                 'search_params': description
             }
-    
+
     return {
         'query_type': 'General Research',
         'search_params': 'Current market conditions and availability'
@@ -97,55 +96,54 @@ def markdown_to_html(markdown_text: str) -> str:
     Handles: headers, bold, italic, links, lists (nested), code blocks.
     """
     html = markdown_text
-    
+
     # Code blocks first (before other conversions)
     html = re.sub(r'```(\w+)?\n(.*?)\n```', r'<pre><code>\2</code></pre>', html, flags=re.DOTALL)
-    
+
     # Headers (h1-h4)
     html = re.sub(r'^#### (.*?)$', r'<h4>\1</h4>', html, flags=re.MULTILINE)
     html = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
     html = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
     html = re.sub(r'^# (.*?)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
-    
+
     # Bold and italic
     html = re.sub(r'\*\*\*(.+?)\*\*\*', r'<strong><em>\1</em></strong>', html)
     html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
     html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
     html = re.sub(r'__(.+?)__', r'<strong>\1</strong>', html)
     html = re.sub(r'_(.+?)_', r'<em>\1</em>', html)
-    
+
     # Links
     html = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'<a href="\2">\1</a>', html)
-    
+
     # Process lists with proper nesting
     html = process_lists(html)
-    
+
     # Paragraphs (but not for lines that are already wrapped in tags)
     lines = html.split('\n')
     processed_lines = []
-    in_list = False
     in_block = False
-    
+
     for line in lines:
         stripped = line.strip()
-        
+
         # Check if we're in a block element
         if stripped.startswith('<pre>') or stripped.startswith('<ul>') or stripped.startswith('<ol>'):
             in_block = True
         if stripped.endswith('</pre>') or stripped.endswith('</ul>') or stripped.endswith('</ol>'):
             in_block = False
-            
+
         # Don't wrap lines that are already HTML elements or empty
         if (stripped.startswith('<') or not stripped or in_block):
             processed_lines.append(line)
         else:
             processed_lines.append(f'<p>{line}</p>')
-    
+
     html = '\n'.join(processed_lines)
-    
+
     # Clean up excessive blank lines (more than 2 consecutive)
     html = re.sub(r'\n{3,}', '\n\n', html)
-    
+
     return html
 
 
@@ -157,12 +155,12 @@ def process_lists(text: str) -> str:
     lines = text.split('\n')
     result = []
     list_stack = []  # Track nested list levels
-    
+
     for line in lines:
         # Check for list items
         unordered_match = re.match(r'^(\s*)[-*+]\s+(.+)$', line)
         ordered_match = re.match(r'^(\s*)(\d+)\.\s+(.+)$', line)
-        
+
         if unordered_match:
             indent = len(unordered_match.group(1))
             content = unordered_match.group(2)
@@ -177,28 +175,28 @@ def process_lists(text: str) -> str:
                 list_type, _ = list_stack.pop()
                 result.append(f'</{list_type}>')
             result.append(line)
-    
+
     # Close any remaining open lists
     while list_stack:
         list_type, _ = list_stack.pop()
         result.append(f'</{list_type}>')
-    
+
     return '\n'.join(result)
 
 
-def handle_list_item(result: List[str], list_stack: List, indent: int, content: str, list_type: str):
+def handle_list_item(result: list[str], list_stack: list, indent: int, content: str, list_type: str):
     """Helper to handle a single list item with proper nesting."""
-    
+
     # Close lists that are deeper than current indent
     while list_stack and list_stack[-1][1] > indent:
         old_type, _ = list_stack.pop()
         result.append(f'</{old_type}>')
-    
+
     # Open new list if needed
     if not list_stack or list_stack[-1][1] < indent:
         result.append(f'<{list_type}>')
         list_stack.append((list_type, indent))
-    
+
     # Add the list item
     result.append(f'<li>{content}</li>')
 
@@ -209,10 +207,10 @@ def format_section_card(title: str, content: str, search_params: str = None) -> 
     """
     # Strip Claude preamble from content
     cleaned_content = strip_claude_preamble(content)
-    
+
     # Convert markdown to HTML
     html_content = markdown_to_html(cleaned_content)
-    
+
     # Build search params line if provided
     params_html = ''
     if search_params:
@@ -221,7 +219,7 @@ def format_section_card(title: str, content: str, search_params: str = None) -> 
             <strong>Search:</strong> {search_params}
         </div>
         '''
-    
+
     card_html = f'''
     <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
         <h2 style="color: #2c3e50; margin-top: 0; margin-bottom: 15px; font-size: 20px; border-bottom: 2px solid #3498db; padding-bottom: 8px;">
@@ -233,29 +231,29 @@ def format_section_card(title: str, content: str, search_params: str = None) -> 
         </div>
     </div>
     '''
-    
+
     return card_html
 
 
-def build_daily_digest_email(sections: List[Dict], date_str: str) -> str:
+def build_daily_digest_email(sections: list[dict], date_str: str) -> str:
     """
     Build the complete daily digest email HTML.
     
     sections: List of dicts with keys 'title', 'content', 'search_params' (optional)
     """
-    
+
     # Build section cards
     section_cards = []
     for section in sections:
         title = section.get('title', 'Untitled Section')
         content = section.get('content', '')
         search_params = section.get('search_params')
-        
+
         card_html = format_section_card(title, content, search_params)
         section_cards.append(card_html)
-    
+
     sections_html = '\n'.join(section_cards)
-    
+
     # Complete email template
     email_html = f'''
     <!DOCTYPE html>
@@ -320,7 +318,7 @@ def build_daily_digest_email(sections: List[Dict], date_str: str) -> str:
     </body>
     </html>
     '''
-    
+
     return email_html
 
 
@@ -350,6 +348,6 @@ Based on my search, both properties meet your criteria.''',
             'search_params': 'Taos County RA-zoned land: 2-3 acres, under $60K, legal road access'
         }
     ]
-    
+
     html = build_daily_digest_email(test_sections, 'Monday, March 24, 2026')
     print(html)

@@ -12,11 +12,11 @@ Usage:
 """
 
 import json
+import logging
 import os
 import re
 import sys
-import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -117,7 +117,7 @@ def load_existing_notes() -> dict:
                 data = json.load(f)
                 if isinstance(data, dict) and "completions" in data:
                     return data
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             log.warning(f"Could not load existing context_notes.json: {e}")
     return {"completions": []}
 

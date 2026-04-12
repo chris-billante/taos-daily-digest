@@ -26,15 +26,15 @@ def build_email_safe_card(title, content, priority='medium'):
     Build a card using table-based layout for email client compatibility.
     Outlook-tested structure.
     """
-    
+
     priority_colors = {
         'high': '#e74c3c',
         'medium': '#f39c12',
         'low': '#95a5a6'
     }
-    
+
     border_color = priority_colors.get(priority, '#f39c12')
-    
+
     # Use table for layout structure (email-safe)
     card_html = f'''
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
@@ -68,7 +68,7 @@ def build_email_safe_card(title, content, priority='medium'):
         </tr>
     </table>
     '''
-    
+
     return card_html
 
 
@@ -77,7 +77,7 @@ def build_two_column_layout(left_content, right_content):
     Build a responsive two-column layout using tables.
     Falls back to stacked on mobile.
     """
-    
+
     layout_html = f'''
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
@@ -104,7 +104,7 @@ def build_two_column_layout(left_content, right_content):
         }}
     </style>
     '''
-    
+
     return layout_html
 
 
@@ -116,7 +116,7 @@ def build_data_table(headers, rows):
         headers: List of column header strings
         rows: List of lists (each inner list is a row)
     """
-    
+
     # Build header row
     header_cells = []
     for header in headers:
@@ -126,14 +126,14 @@ def build_data_table(headers, rows):
                 {header}
             </th>
         ''')
-    
+
     header_row = '<tr>' + ''.join(header_cells) + '</tr>'
-    
+
     # Build data rows
     data_rows = []
     for i, row in enumerate(rows):
         bg_color = '#f8f9fa' if i % 2 == 0 else 'white'
-        
+
         row_cells = []
         for cell in row:
             row_cells.append(f'''
@@ -141,9 +141,9 @@ def build_data_table(headers, rows):
                     {cell}
                 </td>
             ''')
-        
+
         data_rows.append('<tr>' + ''.join(row_cells) + '</tr>')
-    
+
     # Complete table
     table_html = f'''
     <table width="100%" cellpadding="0" cellspacing="0" border="0" 
@@ -156,7 +156,7 @@ def build_data_table(headers, rows):
         </tbody>
     </table>
     '''
-    
+
     return table_html
 
 
@@ -188,7 +188,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'tuesday': {
         'topic': 'Modular Home Construction',
         'resources': [
@@ -212,7 +212,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'wednesday': {
         'topic': 'Rural Land Acquisition',
         'resources': [
@@ -236,7 +236,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'thursday': {
         'topic': 'Off-Grid Heating Systems',
         'resources': [
@@ -260,7 +260,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'friday': {
         'topic': 'Construction Financing',
         'resources': [
@@ -284,7 +284,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'saturday': {
         'topic': 'Vehicle & Van Life',
         'resources': [
@@ -308,7 +308,7 @@ FALLBACK_LEARNING_RESOURCES = {
             }
         ]
     },
-    
+
     'sunday': {
         'topic': 'Project Planning & Budgeting',
         'resources': [
@@ -356,10 +356,10 @@ def format_learning_resources(resources_data):
     Args:
         resources_data: Dict from get_learning_resources_for_day()
     """
-    
+
     topic = resources_data['topic']
     resources = resources_data['resources']
-    
+
     # Build resource cards
     resource_cards = []
     for resource in resources:
@@ -385,7 +385,7 @@ def format_learning_resources(resources_data):
         </table>
         '''
         resource_cards.append(card)
-    
+
     # Complete section
     section_html = f'''
     <p style="color: #2c3e50; font-size: 15px; margin: 0 0 20px 0;">
@@ -394,7 +394,7 @@ def format_learning_resources(resources_data):
     
     {''.join(resource_cards)}
     '''
-    
+
     return section_html
 
 
@@ -410,7 +410,7 @@ if __name__ == '__main__':
         priority='high'
     )
     print("Email-safe card structure created")
-    
+
     # Example 2: Data table
     table = build_data_table(
         headers=['Parcel', 'Acres', 'Price', 'Road Access'],
@@ -421,7 +421,7 @@ if __name__ == '__main__':
         ]
     )
     print("Data table created")
-    
+
     # Example 3: Learning resources with fallback
     import datetime
     today = datetime.datetime.now().strftime('%A').lower()

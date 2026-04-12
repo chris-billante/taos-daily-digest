@@ -17,17 +17,18 @@ import sys
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, date, timezone, timedelta
-from email.mime.text import MIMEText
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
+
 import anthropic
 
 # v4.0 improvements
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from improved_email_formatter import strip_claude_preamble, extract_search_params
 from digest_tracker import DigestTracker, build_tracking_footer
-from table_and_fallback_fixes import get_learning_resources_for_day, format_learning_resources
+from improved_email_formatter import strip_claude_preamble
+from table_and_fallback_fixes import format_learning_resources, get_learning_resources_for_day
 
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
@@ -404,7 +405,7 @@ def format_tacoma_results(new_listings: list, all_listings: list, fb_urls: list)
             loc = lst.get("location","?")
             bed = lst.get("bed","")
             link = f" · [View]({lst['url']})" if lst.get("url") else ""
-            note = f" ⚠️ Verify 4WD" if lst.get("note") else ""
+            note = " ⚠️ Verify 4WD" if lst.get("note") else ""
             parts.append(f"- **{lst.get('title','Unknown')}** | {price} | {miles} | {loc}{link} {bed}{note}")
     else:
         parts.append("## No New Listings Today")
@@ -492,7 +493,7 @@ def p_learn() -> str:
         r = ask(f"""ONE free resource about: {t}. YouTube, blogs, govt guides.
 Avoid: {h}. Format: Title | Source | URL | 2-sentence summary.
 Today: {today()}. Output ONLY the resource.""", 512)
-        
+
         # If result is empty or very short, use fallback
         if not r or len(r) < 50:
             log.info("Using fallback learning resources")
@@ -697,7 +698,7 @@ def build_email(sections: dict) -> tuple[str, str]:
 
 </td></tr></table>
 </body></html>'''
-    
+
     # v4.0: Add tracking footer if issue was created
     if issue_number and tracker:
         try:
@@ -705,7 +706,7 @@ def build_email(sections: dict) -> tuple[str, str]:
             html = html.replace('</body>', tracking_footer + '</body>')
         except Exception as e:
             log.warning(f"Tracking footer skipped: {e}")
-    
+
     return subj, html
 
 # --- Send ---

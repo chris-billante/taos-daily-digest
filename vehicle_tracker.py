@@ -5,10 +5,10 @@ Scrapes CarGurus and Cars.com for 2020-2023 Toyota Tacoma Double Cab Long Bed 4W
 Deduplicates via MD5 cache in data/tacoma_cache.json.
 """
 
-import json
-import re
 import hashlib
+import json
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,7 +55,7 @@ def _load_cache(data_dir: Path) -> dict:
     if cache_file.exists():
         try:
             return json.loads(cache_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             return {}
     return {}
 
