@@ -1,0 +1,76 @@
+{
+  "project": {
+    "name": "Project Name",
+    "budget_ceiling": 0,
+    "budget_note": "Budget description",
+    "target_year": 2028,
+    "phase": "pre-land",
+    "committed_spend": 0
+  },
+  "land": {
+    "county": "County Name",
+    "state": "State",
+    "min_acres": 2,
+    "max_price": 60000,
+    "target_areas": ["Area 1", "Area 2"],
+    "requirements": [
+      "Legal year-round road access",
+      "Zoning allowing primary residence",
+      "No HOA blocking modular/kit homes",
+      "Buildable terrain"
+    ],
+    "water_note": "Water strategy notes",
+    "zip_codes": ["00000"]
+  },
+  "builders": {
+    "active": [
+      {
+        "name": "Builder Name",
+        "models": ["Model A", "Model B"],
+        "type": "Build type",
+        "all_in_low": 0,
+        "all_in_high": 0,
+        "website": "example.com",
+        "status": "research"
+      }
+    ],
+    "dropped": []
+  },
+  "offgrid_systems": {
+    "solar": "Solar system description",
+    "heating": "Heating system description",
+    "hot_water": "Hot water system description",
+    "water": "Water strategy",
+    "septic": "Septic type",
+    "systems_cost_low": 0,
+    "systems_cost_high": 0
+  },
+  "vehicle_search": {
+    "make": "Make",
+    "model": "Model",
+    "config": "Configuration",
+    "years": [2020, 2021, 2022, 2023],
+    "max_price": 40000,
+    "max_miles": 60000,
+    "trims": ["Trim 1", "Trim 2"],
+    "engine": "V6",
+    "search_regions": ["Region 1", "Region 2"]
+  },
+  "van_sale": {
+    "vehicle": "Vehicle Type",
+    "balance_sheet_value": 0,
+    "target_sale_range_low": 0,
+    "target_sale_range_high": 0,
+    "timing": "Timing description"
+  },
+  "bridge_housing": {
+    "options": ["Option 1", "Option 2"],
+    "yurt_suppliers": ["Supplier 1", "Supplier 2"],
+    "rv_budget_max": 0
+  },
+  "contacts": {
+    "realtor": "Realtor name and info",
+    "builder_1": "Builder contact info",
+    "county_planning": "County planning office"
+  }
+}

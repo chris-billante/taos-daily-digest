@@ -8,6 +8,7 @@ Clean, scannable, action-first with:
 - Priority-aware email formatting
 """
 
+import base64
 import json
 import logging
 import os
@@ -323,12 +324,23 @@ def p_action() -> str:
     b = bs[now_mt().timetuple().tm_yday % len(bs)]
     builder_ctx = builder_notes_block()
     builder_section = f"\n\n{builder_ctx}" if builder_ctx else ""
-    return ask(f"""Generate TWO action items for today. Off-grid tiny home, Taos County NM. $350K ALL-IN.
+    builder_list = "\n".join(
+        f"- {bld['name']} ({bld['type']}): {bld['website']}"
+        for bld in bs
+    )
+    land = CONSTRAINTS["land"]
+    areas = ", ".join(land["target_areas"])
+    contacts = CONSTRAINTS.get("contacts", {})
+    contact_lines = "\n".join(f"- {v}" for v in contacts.values() if v)
+    budget = CONSTRAINTS["project"]["budget_ceiling"]
+    return ask(f"""Generate TWO action items for today. Off-grid tiny home, {land['county']} {land['state']}. ${budget:,} ALL-IN.
 
 PRIMARY ACTION (rotate: land, lenders, off-grid learning, outreach):
-Builders: Zook Cabins (https://zookcabins.com), Mighty Small Homes (https://mightysm.com), DC Structures (https://dcstructures.com — Deschutes: https://dcstructures.com/kits/deschutes/, Rogue: https://dcstructures.com/kits/rogue/).
-Land: 2+ acres under $60K, Tres Piedras to Arroyo Hondo. Off-grid OK.
-Recommended agents for land: Crystal Martinez, NM Real Estate Group (575) 779-6482; Lisa Cancro, Taos Properties (taosproperties.com); Luisa Guercini, Berkshire Hathaway Taos.
+Builders:
+{builder_list}
+Land: {land['min_acres']}+ acres under ${land['max_price']:,}, {areas}. Off-grid OK.
+Contacts:
+{contact_lines}
 
 BUILDER CHECK-IN: Today's builder: {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
 Get latest pricing, delivery to NM, reviews, or comparable alternatives.{builder_section}{research_block("builders")}
@@ -350,20 +362,18 @@ Format EXACTLY (no intro text, no explanation, jump straight into the format):
 Today: {today_long()}. Output ONLY the two actions separated by ---. No preamble. No titles like "Action 1". Start directly with **Action:**.""", 1024)
 
 def p_land() -> str:
-    areas = ", ".join(CONSTRAINTS["land"]["target_areas"])
-    return ask(f"""Land for sale in Taos County NM: {areas}. Min {CONSTRAINTS['land']['min_acres']} acres, under ${CONSTRAINTS['land']['max_price']:,}.
+    land = CONSTRAINTS["land"]
+    areas = ", ".join(land["target_areas"])
+    realtor = CONSTRAINTS.get("contacts", {}).get("realtor", "")
+    realtor_line = f"\nRecommended realtor: {realtor}" if realtor else ""
+    return ask(f"""Land for sale in {land['county']} {land['state']}: {areas}. Min {land['min_acres']} acres, under ${land['max_price']:,}.
 Legal road access. Off-grid OK — NO water/sewer/electric needed. Do NOT dismiss parcels lacking utilities.
 For each listing use this format:
 - $PRICE | ACRES acres | LOCATION | Water: [yes/none/unknown] | Road: [paved/dirt/unknown] | [Link text](URL)
 Under $50K with water = mark as 🔴 HIGH PRIORITY.
 No headers like "MATCHING YOUR CRITERIA" — jump straight into the listings.
 
-After listings, add:
----
-**Recommended Land Agents:**
-- Crystal Martinez, NM Real Estate Group — (575) 779-6482 · [crystalmartinez.realtor](https://www.crystalmartinez.realtor/) — 7 active Taos County land listings, covers Tres Piedras to Arroyo Hondo
-- Lisa Cancro, Taos Properties — [taosproperties.com](https://taosproperties.com/) — 2024 Realtor of the Year, 30+ years land/commercial experience
-- Luisa Guercini, Berkshire Hathaway Taos — #1 brokerage in Taos Valley since 1987, land sale specialist
+After listings, add a **Recommended Land Agents** section — search for top-rated agents specializing in vacant land in {land['county']}, {land['state']} covering {areas}.{realtor_line}
 
 Today: {today()}. Output listings first, then agent section.{research_block("land")}""")
 
@@ -372,9 +382,11 @@ def p_builders() -> str:
     b = bs[now_mt().timetuple().tm_yday % len(bs)]
     ctx = builder_notes_block()
     ctx_section = f"\n\n{ctx}" if ctx else ""
+    land = CONSTRAINTS["land"]
+    budget = CONSTRAINTS["project"]["budget_ceiling"]
     return ask(f"""Latest on {b['name']} ({b['type']}). Site: {b['website']}. Models: {', '.join(b['models'])}.
-Context: off-grid tiny home, Taos County NM, 7000ft, $350K all-in.
-(1) Pricing/new models (2) Reviews (3) NM delivery (4) Comparable builders.
+Context: off-grid tiny home, {land['county']} {land['state']}, 7000ft, ${budget:,} all-in.
+(1) Pricing/new models (2) Reviews (3) {land['state']} delivery (4) Comparable builders.
 Bullets with links.
 {SCRIPT}{ctx_section}
 Today: {today()}. Output ONLY findings.""")
@@ -567,7 +579,7 @@ def dashboard() -> str:
                        f'</td></tr>\n')
 
     return f'''<table style="width:100%;border-collapse:collapse;font-size:13px;background:#F8FAFC;border-radius:4px">
-<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">$350K all-in</td></tr>
+<tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;width:110px;font-weight:600">Budget</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${CONSTRAINTS["project"]["budget_ceiling"]:,} all-in</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Committed</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">${CONSTRAINTS["project"]["committed_spend"]:,}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Phase</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{CONSTRAINTS["project"]["phase"].replace("_"," ").title()}</td></tr>
 <tr><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:4px 10px;border-bottom:1px solid #e2e8f0">{days_left}</td></tr>
@@ -661,7 +673,7 @@ def build_email(sections: dict) -> tuple[str, str]:
   padding:20px 24px 14px;border-radius:8px 8px 0 0">
   <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">🏔️ Taos Build Intel</div>
   <div style="font-size:13px;opacity:0.8;margin:4px 0 12px">
-    {dt.strftime("%A, %B %d, %Y")} &nbsp;|&nbsp; $350K All-In &nbsp;|&nbsp; Pre-Land Phase
+    {dt.strftime("%A, %B %d, %Y")} &nbsp;|&nbsp; ${CONSTRAINTS["project"]["budget_ceiling"]:,} All-In &nbsp;|&nbsp; {CONSTRAINTS["project"]["phase"].replace("_"," ").title()}
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.25);padding-top:8px;line-height:1.8">
     {toc}
@@ -734,8 +746,17 @@ def main() -> None:
         log.error("No API key")
         sys.exit(1)
 
-    # Load data files at runtime, not import time
-    CONSTRAINTS = load_json(DATA / "constraints.json")
+    # Load constraints: env var (base64 JSON) takes priority, then file fallback
+    constraints_b64 = os.environ.get("PROJECT_CONSTRAINTS", "")
+    if constraints_b64:
+        CONSTRAINTS = json.loads(base64.b64decode(constraints_b64))
+        log.info("Constraints loaded from PROJECT_CONSTRAINTS env var")
+    elif (DATA / "constraints.json").exists():
+        CONSTRAINTS = load_json(DATA / "constraints.json")
+        log.info("Constraints loaded from data/constraints.json")
+    else:
+        log.error("No constraints found — set PROJECT_CONSTRAINTS or provide data/constraints.json")
+        sys.exit(1)
     LISTING_CACHE = load_json(DATA / "listing_cache.json")
     LEARNING_HIST = load_json(DATA / "learning_history.json")
     research_file = DATA / "research_cache.json"

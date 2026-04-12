@@ -2,7 +2,7 @@
 
 ## Project Overview
 Daily email digest for Angela (RECIPIENT_EMAIL_SECRET) tracking the Taos off-grid homestead project.
-See `data/constraints.json` for full project configuration (budget, land criteria, builders, off-grid systems).
+Project constraints (budget, land criteria, builders, off-grid systems) are loaded from the `PROJECT_CONSTRAINTS` GitHub Secret (base64-encoded JSON) at runtime. For local dev, place a `data/constraints.json` file (gitignored). See `data/constraints.example.json` for the schema.
 
 ---
 
@@ -15,6 +15,7 @@ This project uses the following secrets. **Never write actual values into any fi
 | `ANTHROPIC_API_KEY` | GitHub Secrets | `src/main.py` via `os.environ` |
 | `SENDER_EMAIL` | GitHub Secrets | `src/main.py` via `os.environ` |
 | `SENDER_PASSWORD` | GitHub Secrets | `src/main.py` via `os.environ` |
+| `PROJECT_CONSTRAINTS` | GitHub Secrets | Base64-encoded JSON — decoded at runtime by `src/main.py` and `research_agent.py` |
 | `GITHUB_TOKEN` | Auto-injected by Actions | `digest_tracker.py`, `parse_feedback.py` |
 | `GH_FEEDBACK_TOKEN` | GitHub Secrets | Injected at build time by `feedback-deploy.yml` |
 
@@ -44,8 +45,9 @@ Separate trigger (on push or manual):
 
 | File | Purpose |
 |---|---|
-| `src/main.py` | Main digest generator — do not add any hardcoded credentials |
-| `data/constraints.json` | Project config — safe to edit, no secrets |
+| `src/main.py` | Main digest generator — no hardcoded credentials or sensitive data |
+| `data/constraints.json` | Local dev only — gitignored, contains sensitive project data |
+| `data/constraints.example.json` | Schema reference with placeholder values — safe to commit |
 | `data/context_notes.json` | Angela's completions — auto-generated, safe to commit |
 | `feedback/index.html` | Template only — always has `FEEDBACK_PAT_PLACEHOLDER` |
 | `parse_feedback.py` | Reads GitHub Issues for Angela's feedback |
@@ -56,10 +58,12 @@ Separate trigger (on push or manual):
 ## Development Rules
 
 1. All API calls go through `os.environ.get("SECRET_NAME")` — no fallback hardcoded values
-2. Do not add `print()` or `log()` statements that output secret values
-3. Do not commit `data/last_digest.html` — it may contain issue numbers and personal data (already in `.gitignore` if not, add it)
-4. Test locally with a `.env` file that is in `.gitignore` — never commit `.env`
-5. The `data/` folder only contains safe JSON — no credentials
+2. **Never hardcode sensitive data in prompt strings** — budget, phone numbers, contact names, pricing must come from CONSTRAINTS (loaded from `PROJECT_CONSTRAINTS` env var or `data/constraints.json`)
+3. Do not add `print()` or `log()` statements that output secret values
+4. Do not commit `data/last_digest.html` — it may contain issue numbers and personal data (already in `.gitignore` if not, add it)
+5. Do not commit `data/constraints.json` — it contains sensitive financial and contact data (gitignored)
+6. Test locally with a `.env` file that is in `.gitignore` — never commit `.env`
+7. The `data/` folder committed files are caches only — no credentials or sensitive data
 
 ---
 

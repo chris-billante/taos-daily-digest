@@ -62,6 +62,7 @@ jobs:
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_CONSTRAINTS: ${{ secrets.PROJECT_CONSTRAINTS }}
         run: python research_agent.py
 
       - name: Run daily digest
@@ -72,6 +73,7 @@ jobs:
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_CONSTRAINTS: ${{ secrets.PROJECT_CONSTRAINTS }}
         run: python src/main.py
 
       - name: Commit cache updates

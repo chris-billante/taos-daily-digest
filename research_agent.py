@@ -9,6 +9,7 @@ Output is factual and impersonal — no first-person, no filler, no preamble.
 main.py injects relevant findings into its prompts for higher-quality content.
 """
 
+import base64
 import json
 import logging
 import os
@@ -115,7 +116,10 @@ def search(prompt: str, max_tokens: int = 1024) -> str:
 
 
 def load_constraints() -> dict:
-    """Load project constraints."""
+    """Load project constraints from env var (base64 JSON) or file."""
+    constraints_b64 = os.environ.get("PROJECT_CONSTRAINTS", "")
+    if constraints_b64:
+        return json.loads(base64.b64decode(constraints_b64))
     with open(DATA / "constraints.json", encoding="utf-8") as f:
         return json.load(f)
 
@@ -161,7 +165,7 @@ def research_builders(cfg: dict) -> str:
     return search(f"""Latest pricing, reviews, and news for these small home builders:
 {builder_lines}
 
-Context: off-grid tiny home build in Taos County NM, 7000ft elevation, $350K all-in budget.
+Context: off-grid tiny home build in {cfg['land']['county']} {cfg['land']['state']}, 7000ft elevation, ${cfg['project']['budget_ceiling']:,} all-in budget.
 
 For each builder, report:
 - Current base pricing and any 2025-2026 price changes

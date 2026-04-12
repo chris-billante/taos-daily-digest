@@ -70,4 +70,5 @@ $RECYCLE.BIN/
 # ── Project-specific output (may contain personal data) ───────────────────────
 data/last_digest.html
 data/context_notes.json
+data/constraints.json
 _site/
