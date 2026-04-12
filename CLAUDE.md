@@ -2,7 +2,7 @@
 
 ## Project Overview
 Daily email digest for Angela (RECIPIENT_EMAIL_SECRET) tracking the Taos off-grid homestead project.
-See `taos-project-context/OPUS_CONTEXT.md` for full project context.
+See `data/constraints.json` for full project configuration (budget, land criteria, builders, off-grid systems).
 
 ---
 
